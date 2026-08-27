@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem, DoctorSummaryItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
+import OfficialLetterhead from '@/components/OfficialLetterhead';
 import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock, X, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,11 +22,11 @@ interface HospitalSignatories {
 
 const defaultSignatories: HospitalSignatories = {
   preparedByName: 'EDILOU',
-  preparedByTitle: 'Prepared By',
+  preparedByTitle: 'Billing & Claims In-Charge',
   chiefOfHospitalName: 'OLIVIA A. DANDAN, MD., MPH',
   chiefOfHospitalTitle: 'Chief of Hospital II',
-  facilityName: 'CEBU PROVINCIAL HOSPITAL - BALAMBAN',
-  facilityAddress: 'Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344',
+  facilityName: 'CEBU PROVINCIAL HOSPITAL (BALAMBAN)',
+  facilityAddress: 'Pilapil St., Baliwagan, Balamban Cebu',
   hciNo: 'H07020344'
 };
 
@@ -228,7 +229,7 @@ export default function DoctorSummaryPage() {
         )}
       </div>
 
-      {/* Official Doctor Payslip Modal with Custom Configurable Signatories */}
+      {/* Official Doctor Payslip Modal with Official LETTERHEAD NEW 2026 */}
       {selectedDoctorForSlip && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 print-modal-backdrop">
           <div className="bg-white rounded-xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 print-container">
@@ -253,15 +254,8 @@ export default function DoctorSummaryPage() {
               </div>
             </div>
 
-            {/* Official Hospital Formal Header (Visible on Screen and Print) */}
-            <div className="text-center border-b-2 border-slate-900 pb-4 mb-4">
-              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Republic of the Philippines • Province of Cebu</p>
-              <h2 className="text-lg font-black text-slate-900 tracking-wide mt-0.5">{signatories.facilityName || 'CEBU PROVINCIAL HOSPITAL - BALAMBAN'}</h2>
-              <p className="text-[11px] text-slate-600 font-medium">{signatories.facilityAddress || 'Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344'}</p>
-              <div className="mt-2.5 inline-block bg-slate-900 text-white px-4 py-1 rounded text-xs font-bold uppercase tracking-wider">
-                PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER
-              </div>
-            </div>
+            {/* Official LETTERHEAD NEW 2026 Header with Official Logos */}
+            <OfficialLetterhead title="PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER" />
 
             {/* Doctor & Period Details */}
             <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
@@ -321,7 +315,7 @@ export default function DoctorSummaryPage() {
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
                 <p className="font-bold text-slate-900 mt-1 uppercase">{signatories.preparedByName || user?.name || 'EDILOU'}</p>
-                <p className="text-[10px] text-slate-500 font-semibold">{signatories.preparedByTitle || 'Prepared By'}</p>
+                <p className="text-[10px] text-slate-500 font-semibold">{signatories.preparedByTitle || 'Billing & Claims In-Charge'}</p>
               </div>
 
               <div>
