@@ -7,7 +7,7 @@ import { CaseItem } from '@/types';
 import { recalculateCase, OFFICIAL_EXCEL_REMARKS } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
 import { OFFICIAL_DOCTORS_ROSTER, sanitizeDoctorName } from '@/lib/acpnParser';
-import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity, Filter } from 'lucide-react';
+import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CasesPage() {
@@ -56,14 +56,8 @@ export default function CasesPage() {
     return Array.from(set).sort();
   }, [cases]);
 
-  // All 21 Excel Remarks
-  const remarkOptions = useMemo(() => {
-    const set = new Set<string>(OFFICIAL_EXCEL_REMARKS);
-    cases.forEach(c => {
-      if (c.remarks && c.remarks.trim()) set.add(c.remarks.trim());
-    });
-    return Array.from(set).sort();
-  }, [cases]);
+  // Exact 19 Official Excel Remarks
+  const remarkOptions = OFFICIAL_EXCEL_REMARKS;
 
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
@@ -223,7 +217,7 @@ export default function CasesPage() {
           </div>
         </div>
 
-        {/* Filter Bar with all 21 Excel Remarks */}
+        {/* Filter Bar with exactly 19 Excel Remarks */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -242,7 +236,7 @@ export default function CasesPage() {
               onChange={(e) => setSelectedRemark(e.target.value)}
               className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 font-bold text-slate-800"
             >
-              <option value="ALL">🔍 All Excel Remarks ({remarkOptions.length} Types)</option>
+              <option value="ALL">🔍 All Excel Remarks (19 Types)</option>
               {remarkOptions.map((rem) => (
                 <option key={rem} value={rem}>
                   {rem === 'Hemo' ? '🫘 Hemo (Hemodialysis)' :

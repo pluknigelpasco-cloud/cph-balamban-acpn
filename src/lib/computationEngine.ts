@@ -10,18 +10,16 @@ export const OFFICIAL_EXCEL_REMARKS = [
   'D/C',
   'Dental',
   'FP',
-  'FP?',
-  'Hemo',
   'HRPU',
   'HRPU FP',
+  'Hemo',
   'ICU',
   'ICU/IJ',
   'IJ',
-  'IJ?',
   'IUD',
   'NICU',
-  'Pedia',
-  'PM'
+  'PM',
+  'Pedia'
 ];
 
 export function recalculateCase(c: Partial<CaseItem>): CaseItem {
