@@ -1,27 +1,41 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import initialData from '@/lib/initialData.json';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Layers, Calendar, ShieldAlert } from 'lucide-react';
+import { CaseItem } from '@/types';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { selectedMonth, setSelectedMonth } = usePeriod();
+  const { selectedMonth } = usePeriod();
   const { user } = useAuth();
-  const cases = initialData.casesData || [];
+  const [cases, setCases] = useState<CaseItem[]>([]);
 
-  // Filter or scale data based on selectedMonth
-  const multiplier = selectedMonth === 'JULY 2026' ? 0.95 : selectedMonth === 'AUGUST 2026' ? 1.05 : 1.0;
+  // Load actual cases from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('cph_cases_data');
+    if (saved) {
+      try {
+        setCases(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
 
-  const totalCasesCount = Math.round(cases.length * (selectedMonth === 'ALL' ? 1 : 1));
-  const totalGrossPF = 13198484.50 * multiplier;
-  const totalORCasesGross = 7884620.00 * multiplier;
-  const totalPool = 1991413.06 * multiplier;
-  const totalSharingGross = 7305277.56 * multiplier;
-  const medicalShare = totalSharingGross / 2;
-  const nonMedicalShare = totalSharingGross / 2;
+  // Filter actual cases by active month
+  const currentMonthCases = useMemo(() => {
+    return cases.filter(c => {
+      return selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month;
+    });
+  }, [cases, selectedMonth]);
+
+  // Compute 100% dynamic KPIs from actual data
+  const totalCasesCount = currentMonthCases.length;
+  const totalGrossPF = currentMonthCases.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+  const totalPool = currentMonthCases.reduce((sum, c) => sum + (c.forPool || 0), 0);
+  const totalSharingGross = currentMonthCases.reduce((sum, c) => sum + (c.balance || 0), 0);
+  const medicalShare = totalSharingGross * 0.5;
+  const nonMedicalShare = totalSharingGross * 0.5;
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -55,7 +69,7 @@ export default function DashboardPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            View {selectedMonth} Cases
+            View {selectedMonth} Cases ({totalCasesCount})
           </Link>
         </div>
       </div>
@@ -70,7 +84,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()}</p>
-          <p className="text-xs text-emerald-600 font-medium mt-1">Verified claims in period</p>
+          <p className="text-xs text-slate-500 mt-1">Verified claims in period</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -83,7 +97,7 @@ export default function DashboardPage() {
           <p className="text-2xl font-bold text-slate-900 mt-2">
             ₱{totalGrossPF.toLocaleString('en-US', { minimumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Master PF Gross pool</p>
+          <p className="text-xs text-slate-500 mt-1">Master PF Gross from uploads</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
@@ -149,6 +163,21 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {totalCasesCount === 0 && (
+        <div className="p-6 bg-slate-100 rounded-xl border border-slate-200 text-center space-y-2">
+          <p className="text-sm font-bold text-slate-800">No ACPN claims uploaded yet for {selectedMonth}</p>
+          <p className="text-xs text-slate-500">
+            Upload your official PhilHealth ACPN PDF for {selectedMonth} to view exact amounts, cases, and doctor payouts.
+          </p>
+          <Link
+            href="/upload"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition mt-2"
+          >
+            <UploadCloud className="w-4 h-4" /> Upload {selectedMonth} ACPN PDF
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
