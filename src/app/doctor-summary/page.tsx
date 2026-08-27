@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem, DoctorSummaryItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
-import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock } from 'lucide-react';
+import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock, X } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DoctorSummaryPage() {
@@ -39,7 +39,7 @@ export default function DoctorSummaryPage() {
     return computeDoctorSummary(monthCases);
   }, [monthCases]);
 
-  // Filtered summaries: If Doctor, ONLY show this Doctor!
+  // Filtered summaries
   const filteredDoctors = useMemo(() => {
     return allDoctorSummaries.filter(d => {
       if (isDoctorRole) {
@@ -54,10 +54,14 @@ export default function DoctorSummaryPage() {
   const totalWtax = filteredDoctors.reduce((acc, d) => acc + d.wtax20, 0);
   const totalNet = filteredDoctors.reduce((acc, d) => acc + d.netPf, 0);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
-      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="no-print bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${
@@ -89,7 +93,7 @@ export default function DoctorSummaryPage() {
       </div>
 
       {/* Summary KPI Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="no-print grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
             {isDoctorRole ? 'My Gross PF Share' : `Gross PF (${selectedMonth})`}
@@ -113,9 +117,9 @@ export default function DoctorSummaryPage() {
         </div>
       </div>
 
-      {/* Search Bar (Only shown for Admin) */}
+      {/* Search Bar (Only for Admin) */}
       {!isDoctorRole && (
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+        <div className="no-print bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
           <Search className="w-4 h-4 text-slate-400" />
           <input
             type="text"
@@ -128,7 +132,7 @@ export default function DoctorSummaryPage() {
       )}
 
       {/* Doctor Summary Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="no-print bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {filteredDoctors.length === 0 ? (
           <div className="p-10 text-center space-y-3">
             <div className="p-4 bg-slate-50 text-slate-400 rounded-full inline-block">
@@ -192,69 +196,120 @@ export default function DoctorSummaryPage() {
         )}
       </div>
 
-      {/* Doctor Payslip Modal */}
+      {/* Official Doctor Payslip Modal with Clean Print Layout */}
       {selectedDoctorForSlip && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
-            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 print-modal-backdrop">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 print-container">
+            {/* Modal Screen Top Bar (Hidden in Print) */}
+            <div className="no-print flex justify-between items-center border-b border-slate-100 pb-3 mb-4">
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                Official PhilHealth Payslip Voucher
+              </span>
+              <button
+                onClick={() => setSelectedDoctorForSlip(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Official Hospital Formal Header (Visible on Screen and Print) */}
+            <div className="text-center border-b-2 border-slate-900 pb-4 mb-4">
+              <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Republic of the Philippines • Province of Cebu</p>
+              <h2 className="text-lg font-black text-slate-900 tracking-wide mt-0.5">CEBU PROVINCIAL HOSPITAL - BALAMBAN</h2>
+              <p className="text-[11px] text-slate-600 font-medium">Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344</p>
+              <div className="mt-2.5 inline-block bg-slate-900 text-white px-4 py-1 rounded text-xs font-bold uppercase tracking-wider">
+                PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER
+              </div>
+            </div>
+
+            {/* Doctor & Period Details */}
+            <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">
               <div>
-                <h3 className="font-bold text-base text-slate-900">CEBU PROVINCIAL HOSPITAL - BALAMBAN</h3>
-                <p className="text-xs text-slate-500">Official PhilHealth PF Sharing Payslip ({selectedMonth})</p>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Physician Name:</span>
+                <p className="text-sm font-bold text-slate-900 mt-0.5">{selectedDoctorForSlip.doctorName}</p>
+                <p className="text-[11px] text-slate-600 font-medium">{selectedDoctorForSlip.specialty}</p>
               </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">Period Covered:</span>
+                <p className="text-sm font-bold text-emerald-800 mt-0.5">{selectedMonth}</p>
+                <p className="text-[11px] text-slate-600 font-mono">Verified Claims: {selectedDoctorForSlip.totalCases} cases</p>
+              </div>
+            </div>
+
+            {/* Financial Breakdown Table */}
+            <table className="w-full text-xs border border-slate-300 rounded overflow-hidden mb-6">
+              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                <tr>
+                  <th className="p-3 text-left">Particulars / Compensation Breakdown</th>
+                  <th className="p-3 text-right">Amount (PHP)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr>
+                  <td className="p-3 font-semibold text-slate-800">
+                    Gross Professional Fee (PF) Share
+                    <span className="block text-[10px] text-slate-500 font-normal">Base earned share from verified PhilHealth ACPN cases</span>
+                  </td>
+                  <td className="p-3 text-right font-bold text-slate-900 font-mono text-sm">
+                    ₱{selectedDoctorForSlip.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+                <tr className="bg-amber-50/40 text-amber-900">
+                  <td className="p-3 font-semibold">
+                    Less: 20% Withholding Tax (Creditable Income Tax)
+                    <span className="block text-[10px] text-amber-700 font-normal">Official deduction formula: =Gross PF * 0.20</span>
+                  </td>
+                  <td className="p-3 text-right font-bold font-mono text-sm text-amber-800">
+                    - ₱{selectedDoctorForSlip.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+                <tr className="bg-emerald-50 text-emerald-950 border-t-2 border-slate-900 font-black">
+                  <td className="p-3 text-sm font-black uppercase tracking-wide">
+                    NET PROFESSIONAL FEE PAYABLE
+                    <span className="block text-[10px] text-emerald-700 font-normal">Net amount to be disbursed via cheque / bank credit</span>
+                  </td>
+                  <td className="p-3 text-right font-black font-mono text-base text-emerald-800">
+                    ₱{selectedDoctorForSlip.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Official Hospital Signatories */}
+            <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-300 text-center text-xs mt-4">
+              <div>
+                <div className="border-b border-slate-400 pb-8"></div>
+                <p className="font-bold text-slate-900 mt-1">BILLING & CLAIMS IN-CHARGE</p>
+                <p className="text-[10px] text-slate-500">Prepared By</p>
+              </div>
+
+              <div>
+                <div className="border-b border-slate-400 pb-8"></div>
+                <p className="font-bold text-slate-900 mt-1">HOSPITAL ACCOUNTANT</p>
+                <p className="text-[10px] text-slate-500">Certified Correct</p>
+              </div>
+
+              <div>
+                <div className="border-b border-slate-400 pb-8"></div>
+                <p className="font-bold text-slate-900 mt-1">{selectedDoctorForSlip.doctorName}</p>
+                <p className="text-[10px] text-slate-500">Doctor Conforme / Received By</p>
+              </div>
+            </div>
+
+            {/* Screen Action Buttons (Hidden in Print) */}
+            <div className="no-print flex justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
               <button
                 onClick={() => setSelectedDoctorForSlip(null)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-4 bg-slate-50 rounded-lg space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Doctor:</span>
-                <span className="font-bold text-slate-900">{selectedDoctorForSlip.doctorName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Specialty:</span>
-                <span className="text-slate-700">{selectedDoctorForSlip.specialty}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Active Period:</span>
-                <span className="font-bold text-emerald-800">{selectedMonth}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Total Cases Handled:</span>
-                <span className="font-bold text-slate-900">{selectedDoctorForSlip.totalCases} cases</span>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-t border-b border-slate-100 py-3 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-600">Gross PF Share:</span>
-                <span className="font-bold text-slate-900">₱{selectedDoctorForSlip.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-amber-700">
-                <span>Less: 20% Withholding Tax:</span>
-                <span className="font-bold">- ₱{selectedDoctorForSlip.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-base font-extrabold text-emerald-700 pt-2 border-t border-slate-200">
-                <span>Net PF Amount Payable:</span>
-                <span>₱{selectedDoctorForSlip.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800"
-              >
-                <Printer className="w-3.5 h-3.5" /> Print Payslip
-              </button>
-              <button
-                onClick={() => setSelectedDoctorForSlip(null)}
-                className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition"
               >
                 Close
+              </button>
+              <button
+                onClick={handlePrint}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-md transition"
+              >
+                <Printer className="w-4 h-4 text-emerald-400" /> Print Official Voucher
               </button>
             </div>
           </div>
