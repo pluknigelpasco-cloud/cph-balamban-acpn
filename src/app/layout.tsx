@@ -140,30 +140,30 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
-          {!isDoctor && (
-            <>
-              <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Administration & Settings
-              </div>
-              <Link
-                href="/settings"
-                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-                  pathname === '/settings' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Settings className="w-4 h-4 text-amber-400" />
-                Signatories & Settings
-              </Link>
-              <Link
-                href="/users"
-                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-                  pathname === '/users' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <UserCog className="w-4 h-4 text-rose-400" />
-                User & Permissions
-              </Link>
-            </>
+          <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {isDoctor ? 'My Account' : 'Administration & Settings'}
+          </div>
+
+          <Link
+            href="/settings"
+            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+              pathname === '/settings' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Settings className="w-4 h-4 text-amber-400" />
+            {isDoctor ? 'Change Password & Profile' : 'Signatories & Settings'}
+          </Link>
+
+          {!isDoctor && hasPermission('users') && (
+            <Link
+              href="/users"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/users' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <UserCog className="w-4 h-4 text-rose-400" />
+              User & Permissions
+            </Link>
           )}
 
           <div className="pt-4 px-3 py-2">
