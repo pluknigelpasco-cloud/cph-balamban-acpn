@@ -280,20 +280,20 @@ export default function DoctorSummaryPage() {
             <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-300 text-center text-xs mt-4">
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
-                <p className="font-bold text-slate-900 mt-1">BILLING & CLAIMS IN-CHARGE</p>
-                <p className="text-[10px] text-slate-500">Prepared By</p>
+                <p className="font-bold text-slate-900 mt-1 uppercase">{user?.name || 'EDILOU'}</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Prepared By</p>
               </div>
 
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
-                <p className="font-bold text-slate-900 mt-1">HOSPITAL ACCOUNTANT</p>
-                <p className="text-[10px] text-slate-500">Certified Correct</p>
+                <p className="font-bold text-slate-900 mt-1">OLIVIA A. DANDAN, MD., MPH</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Chief of Hospital</p>
               </div>
 
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
-                <p className="font-bold text-slate-900 mt-1">{selectedDoctorForSlip.doctorName}</p>
-                <p className="text-[10px] text-slate-500">Doctor Conforme / Received By</p>
+                <p className="font-bold text-slate-900 mt-1 uppercase">{selectedDoctorForSlip.doctorName}</p>
+                <p className="text-[10px] text-slate-500 font-semibold">Doctor Conforme / Received By</p>
               </div>
             </div>
 
