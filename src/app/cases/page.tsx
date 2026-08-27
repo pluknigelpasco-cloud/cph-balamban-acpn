@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { recalculateCase } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
+import { OFFICIAL_DOCTORS_ROSTER, sanitizeDoctorName } from '@/lib/acpnParser';
 import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
@@ -18,12 +19,20 @@ export default function CasesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
 
-  // Load from localStorage
+  // Load from localStorage and sanitize any old dirty records
   useEffect(() => {
     const saved = localStorage.getItem('cph_cases_data');
     if (saved) {
       try {
-        setCases(JSON.parse(saved));
+        const rawCases: CaseItem[] = JSON.parse(saved);
+        const sanitized = rawCases.map(c => ({
+          ...c,
+          surgeon: sanitizeDoctorName(c.surgeon || ''),
+          anesth: sanitizeDoctorName(c.anesth || ''),
+          imPediaGp: sanitizeDoctorName(c.imPediaGp || '')
+        }));
+        setCases(sanitized);
+        localStorage.setItem('cph_cases_data', JSON.stringify(sanitized));
       } catch (e) {}
     }
   }, []);
@@ -36,14 +45,13 @@ export default function CasesPage() {
   const isDoctorRole = user?.role === 'doctor';
   const doctorName = user?.doctorName || '';
 
+  // Clean deduplicated doctor options
   const doctorOptions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(OFFICIAL_DOCTORS_ROSTER);
     cases.forEach(c => {
-      if (c.surgeon) set.add(c.surgeon);
-      if (c.anesth) set.add(c.anesth);
-      if (c.imPediaGp) {
-        c.imPediaGp.split(/[/;,]/).forEach(p => p.trim() && set.add(p.trim()));
-      }
+      if (c.surgeon && c.surgeon.length > 3 && !/Page|d+/i.test(c.surgeon)) set.add(c.surgeon);
+      if (c.anesth && c.anesth.length > 3 && !/Page|d+/i.test(c.anesth)) set.add(c.anesth);
+      if (c.imPediaGp && c.imPediaGp.length > 3 && !/Page|d+/i.test(c.imPediaGp)) set.add(c.imPediaGp);
     });
     return Array.from(set).sort();
   }, [cases]);
@@ -83,7 +91,6 @@ export default function CasesPage() {
     });
   }, [cases, selectedMonth, showArchived, isDoctorRole, doctorName, searchTerm, selectedDoctor, selectedRemark]);
 
-  // Total pages
   const totalPages = Math.ceil(filteredCases.length / pageSize) || 1;
   const paginatedCases = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -118,7 +125,6 @@ export default function CasesPage() {
     }
   };
 
-  // Month-Specific Reset Cases
   const handleResetMonthCases = () => {
     if (confirm(`Are you sure you want to clear cases for ${selectedMonth} ONLY?\n(Cases in other months will remain untouched.)`)) {
       if (selectedMonth === 'ALL') {
@@ -135,7 +141,7 @@ export default function CasesPage() {
       id: `case-${Date.now()}`,
       itemNo: (cases.length + 1).toString(),
       patientName: 'NEW PATIENT',
-      surgeon: '',
+      surgeon: OFFICIAL_DOCTORS_ROSTER[0],
       anesth: '',
       imPediaGp: '',
       remarks: '1D',
@@ -251,7 +257,7 @@ export default function CasesPage() {
         </div>
       </div>
 
-      {/* Spreadsheet Data Grid with Sequential Numbering (1, 2, 3...) and Pagination */}
+      {/* Spreadsheet Data Grid */}
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         {filteredCases.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
@@ -284,8 +290,8 @@ export default function CasesPage() {
                 <tr>
                   <th className="p-2.5 border-r border-slate-800 w-12 text-center">#</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">Surgeon</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">Anesthesiologist</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[150px]">Surgeon / Attending</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[150px]">Anesthesiologist</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
                   <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
                   <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
@@ -387,13 +393,12 @@ export default function CasesPage() {
           </div>
         )}
 
-        {/* Footer Summary Row & Pagination Controls */}
+        {/* Footer Summary Row & Pagination */}
         {filteredCases.length > 0 && (
           <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
             <div className="flex items-center gap-4">
               <div>Total Claims: <span className="text-emerald-400 font-bold">{filteredCases.length}</span> ({selectedMonth})</div>
               
-              {/* Pagination Controls */}
               <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
                 <button
                   disabled={currentPage <= 1}

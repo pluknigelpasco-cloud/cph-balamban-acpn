@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
-import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw, UserCheck, Stethoscope as DocIcon } from 'lucide-react';
+import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw } from 'lucide-react';
 import { computeNicuHours, computePediaImHours } from '@/lib/computationEngine';
-import { CaseItem } from '@/types';
+import { OFFICIAL_DOCTORS_ROSTER } from '@/lib/acpnParser';
 
 interface HemoEntry {
   id: string;
@@ -15,41 +15,13 @@ interface HemoEntry {
   isArchived?: boolean;
 }
 
-const defaultDoctorRoster = [
-  'MACHACON, KEITH M.',
-  'DELOS SANTOS, JERAMY A.',
-  'JUSON, JEREMIAH JADE T.',
-  'RICO, RICHARD JANUS R.',
-  'ALPAS-DELA PEÑA, APRIL ANN M.',
-  'CASTRO, LEIDENIA I.',
-  'MORALDE, KIERSTIENNE KAREN D.',
-  'TACALDO, RICKY JOY B.',
-  'ARDIENTE, KIRRBY S.',
-  'EGONIA, HUBERT F.',
-  'LASDOCE, KAZELINE L.',
-  'TORRALBA, NOVA CARL V.',
-  'SEETO, LANIE RAE Y.',
-  'VERANO- DUMDUM, RUSIENNE MAE A.',
-  'ESTALANI, CORA M.',
-  'TAWASIL, ABU-KHAYRE O.',
-  'KHO, SHERYL P.',
-  'DANDAN, OLIVIA A.',
-  'PEÑARANDA, CHARLENE LUZ L.',
-  'BAJA, CLARICE P.',
-  'PAD-AY, MELANIE B.',
-  'ROSELL, KURT PETER',
-  'LANORIAS, DENNIS JR C.',
-  'LIBERATO, JAN FREDERICK T.',
-  'ABAYON, MARCELLE MAE L.'
-];
-
 export default function DepartmentsPage() {
   const { selectedMonth } = usePeriod();
   const [activeTab, setActiveTab] = useState<'hemo' | 'nicu' | 'pedia-im' | 'btl' | 'pm'>('hemo');
   const [showArchived, setShowArchived] = useState(false);
 
-  // Dynamic doctor list combined from master roster + cases in localStorage
-  const [doctorList, setDoctorList] = useState<string[]>(defaultDoctorRoster);
+  // Clean, official deduplicated doctor list
+  const doctorList = OFFICIAL_DOCTORS_ROSTER;
 
   // HEMO state
   const [hemoEntries, setHemoEntries] = useState<HemoEntry[]>([]);
@@ -70,24 +42,8 @@ export default function DepartmentsPage() {
   // PM state
   const [pmCases, setPmCases] = useState<any[]>([]);
 
-  // Load from localStorage & extract all active doctors
+  // Load from localStorage
   useEffect(() => {
-    const savedCasesStr = localStorage.getItem('cph_cases_data');
-    if (savedCasesStr) {
-      try {
-        const parsedCases: CaseItem[] = JSON.parse(savedCasesStr);
-        const docsSet = new Set<string>(defaultDoctorRoster);
-        parsedCases.forEach(c => {
-          if (c.surgeon && c.surgeon.trim().length > 3) docsSet.add(c.surgeon.trim());
-          if (c.anesth && c.anesth.trim().length > 3) docsSet.add(c.anesth.trim());
-          if (c.imPediaGp) {
-            c.imPediaGp.split(/[/;,]/).forEach(d => d.trim().length > 3 && docsSet.add(d.trim()));
-          }
-        });
-        setDoctorList(Array.from(docsSet).sort());
-      } catch (e) {}
-    }
-
     const savedHemo = localStorage.getItem('cph_dept_hemo');
     if (savedHemo) { try { setHemoEntries(JSON.parse(savedHemo)); } catch (e) {} }
 
@@ -118,28 +74,28 @@ export default function DepartmentsPage() {
   // Add / Edit modals state
   const [isAddingHemo, setIsAddingHemo] = useState(false);
   const [editingHemo, setEditingHemo] = useState<HemoEntry | null>(null);
-  const [hemoFormDoc, setHemoFormDoc] = useState(defaultDoctorRoster[7]); // TACALDO
+  const [hemoFormDoc, setHemoFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[20]); // TACALDO
   const [hemoFormMins, setHemoFormMins] = useState(600);
   const [hemoFormMult, setHemoFormMult] = useState(1.0);
 
   const [isAddingNicu, setIsAddingNicu] = useState(false);
-  const [nicuFormName, setNicuFormName] = useState(defaultDoctorRoster[5]); // CASTRO
+  const [nicuFormName, setNicuFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]); // CASTRO
   const [nicuFormRole, setNicuFormRole] = useState('pedia');
   const [nicuFormStatus, setNicuFormStatus] = useState('jo');
   const [nicuFormHours, setNicuFormHours] = useState(180);
 
   const [isAddingPedia, setIsAddingPedia] = useState(false);
-  const [pediaFormName, setPediaFormName] = useState(defaultDoctorRoster[5]); // CASTRO
+  const [pediaFormName, setPediaFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]); // CASTRO
   const [pediaFormHours, setPediaFormHours] = useState(150);
 
   const [isAddingBtl, setIsAddingBtl] = useState(false);
-  const [btlFormDoc, setBtlFormDoc] = useState(defaultDoctorRoster[16]); // KHO
+  const [btlFormDoc, setBtlFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[9]); // KHO
   const [btlFormAmount, setBtlFormAmount] = useState(5000);
 
   const [isAddingPm, setIsAddingPm] = useState(false);
   const [pmFormPatient, setPmFormPatient] = useState('');
-  const [pmFormSurgeon, setPmFormSurgeon] = useState(defaultDoctorRoster[8]); // ARDIENTE
-  const [pmFormAnesth, setPmFormAnesth] = useState(defaultDoctorRoster[6]); // MORALDE
+  const [pmFormSurgeon, setPmFormSurgeon] = useState(OFFICIAL_DOCTORS_ROSTER[1]); // ARDIENTE
+  const [pmFormAnesth, setPmFormAnesth] = useState(OFFICIAL_DOCTORS_ROSTER[14]); // MORALDE
   const [pmFormAmount, setPmFormAmount] = useState(16380);
 
   // HEMO CRUD
@@ -270,11 +226,11 @@ export default function DepartmentsPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               PERIOD: {selectedMonth}
             </span>
-            <span className="text-xs text-slate-500">Doctor Dropdown Selectors & Formula Recalculations</span>
+            <span className="text-xs text-slate-500">Clean Master Doctor Roster ({doctorList.length} Physicians)</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Department Sharing Center</h1>
           <p className="text-sm text-slate-500">
-            Select doctors from the accredited roster dropdown, enter minutes/hours, and manage departmental sharing.
+            Select accredited physicians from the clean dropdown roster to calculate departmental distributions.
           </p>
         </div>
 
@@ -348,7 +304,7 @@ export default function DepartmentsPage() {
               <p className="text-xs text-slate-500">Formula: Rate per minute = Total HEMO-IM Share / Total Calculated Minutes</p>
             </div>
             <button
-              onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(doctorList[0]); }}
+              onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(OFFICIAL_DOCTORS_ROSTER[20]); }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
             >
               <Plus className="w-4 h-4" /> Add HEMO Doctor Entry
@@ -378,7 +334,7 @@ export default function DepartmentsPage() {
 
           {activeHemoList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No HEMO doctor entries yet for {selectedMonth}. Click "+ Add HEMO Doctor Entry" to select doctors from dropdown.
+              No HEMO doctor entries yet for {selectedMonth}. Click "+ Add HEMO Doctor Entry" to select doctors.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -443,7 +399,6 @@ export default function DepartmentsPage() {
             </table>
           )}
 
-          {/* Modal with Doctor Dropdown */}
           {isAddingHemo && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
@@ -550,7 +505,7 @@ export default function DepartmentsPage() {
 
           {activeNicuList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No NICU doctor entries yet for {selectedMonth}. Click "+ Add NICU Entry" to select doctors from dropdown.
+              No NICU doctor entries yet for {selectedMonth}. Click "+ Add NICU Entry" to select doctors.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">

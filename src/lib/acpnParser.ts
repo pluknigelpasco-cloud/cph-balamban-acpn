@@ -1,30 +1,86 @@
 import { ClaimItem } from '@/types';
 
-export function cleanDoctorString(raw: string): string[] {
+export const OFFICIAL_DOCTORS_ROSTER = [
+  'ALPAS-DELA PEÑA, APRIL ANN M.',
+  'ARDIENTE, KIRRBY S.',
+  'BAJA, CLARICE P.',
+  'CASTRO, LEIDENIA I.',
+  'DANDAN, OLIVIA A.',
+  'DELOS SANTOS, JERAMY A.',
+  'EGONIA, HUBERT F.',
+  'ESTALANI, CORA M.',
+  'JUSON, JEREMIAH JADE T.',
+  'KHO, SHERYL P.',
+  'LANORIAS, DENNIS JR C.',
+  'LASDOCE, KAZELINE L.',
+  'LIBERATO, JAN FREDERICK T.',
+  'MACHACON, KEITH M.',
+  'MORALDE, KIERSTIENNE KAREN D.',
+  'PAD-AY, MELANIE B.',
+  'PEÑARANDA, CHARLENE LUZ L.',
+  'RICO, RICHARD JANUS R.',
+  'ROSELL, KURT PETER',
+  'SEETO, LANIE RAE Y.',
+  'TACALDO, RICKY JOY B.',
+  'TAWASIL, ABU-KHAYRE O.',
+  'TORRALBA, NOVA CARL V.',
+  'VERANO-DUMDUM, RUSIENNE MAE A.'
+];
+
+export function sanitizeDoctorName(raw: string): string {
+  if (!raw) return '';
   let cleaned = raw
     .replace(/Credited/gi, '')
     .replace(/Date Generated:[\s\S]*$/gi, '')
+    .replace(/Page\s+\d+[\s\S]*$/gi, '')
     .replace(/--\s+of\s+--/gi, '')
-    .replace(/Page\s+\d+\s+of\s+\d+/gi, '')
-    .replace(/Run\s+Date:\s+[\d/:\sAPMapm]+/gi, '')
-    .replace(/\d{4}\s+\d{2}:\d{2}:\d{2}\s+[APMapm]{2}/gi, '')
-    .replace(/AUTO CREDIT PAYMENT NOTICE/gi, '')
-    .replace(/PERIOD COVERED:[\s\S]*?Bank Account No\.:\s*\d+/gi, '')
-    .replace(/PABN No\.[\s\S]*?WTax\s+HCI\s+PF/gi, '')
-    .replace(/GRAND TOTAL[\s\S]*/gi, '')
+    .replace(/Run\s+Date:[\s\S]*$/gi, '')
+    .replace(/\d{4}\s+\d{2}:\d{2}:\d{2}[\s\S]*$/gi, '')
+    .replace(/AUTO CREDIT[\s\S]*$/gi, '')
+    .replace(/PERIOD COVERED:[\s\S]*$/gi, '')
+    .replace(/PABN No\.[\s\S]*$/gi, '')
+    .replace(/GRAND TOTAL[\s\S]*$/gi, '')
+    .replace(/Caserate[\s\S]*$/gi, '')
+    .replace(/WTax[\s\S]*$/gi, '')
+    .replace(/HCI[\s\S]*$/gi, '')
+    .replace(/PF[\s\S]*$/gi, '')
+    .replace(/[\r\n]+/g, ' ')
     .trim();
 
-  const docs = cleaned.split(/[;/]/).map(d => {
-    let dClean = d.replace(/[\r\n]+/g, ' ')
-      .replace(/\b\d{2}\b/g, '')
-      .replace(/PABN.*PF/gi, '')
-      .replace(/Total.*PF/gi, '')
-      .replace(/Date Generated:.*/gi, '')
-      .trim();
-    return dClean;
-  }).filter(d => d && d.length > 3 && !/^\d+$/.test(d) && !d.includes('PABN') && !d.includes('WTax') && !d.includes('Generated'));
+  if (cleaned.includes(';')) {
+    cleaned = cleaned.split(';')[0].trim();
+  }
 
-  return docs;
+  cleaned = cleaned.replace(/^[^A-Za-z]+/, '').replace(/[^A-Za-z\.\s\-]+$/, '').trim();
+
+  const upper = cleaned.toUpperCase();
+  for (const doc of OFFICIAL_DOCTORS_ROSTER) {
+    const lastName = doc.split(',')[0].trim();
+    if (upper.includes(lastName)) {
+      return doc;
+    }
+  }
+
+  if (/Page|\d+|Date|PABN|WTax|Gross/i.test(cleaned) || cleaned.length < 3 || cleaned.length > 50) {
+    return '';
+  }
+
+  return cleaned;
+}
+
+export function cleanDoctorString(raw: string): string[] {
+  if (!raw) return [];
+  const rawDocs = raw.split(/[;/]/);
+  const result: string[] = [];
+
+  for (const d of rawDocs) {
+    const clean = sanitizeDoctorName(d);
+    if (clean && clean.length > 3 && !result.includes(clean)) {
+      result.push(clean);
+    }
+  }
+
+  return result;
 }
 
 export function parseAcpnText(fullText: string): ClaimItem[] {
