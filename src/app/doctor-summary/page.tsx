@@ -6,20 +6,44 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem, DoctorSummaryItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
-import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock, X } from 'lucide-react';
+import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock, X, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
+
+interface HospitalSignatories {
+  preparedByName: string;
+  preparedByTitle: string;
+  chiefOfHospitalName: string;
+  chiefOfHospitalTitle: string;
+  facilityName: string;
+  facilityAddress: string;
+  hciNo: string;
+}
+
+const defaultSignatories: HospitalSignatories = {
+  preparedByName: 'EDILOU',
+  preparedByTitle: 'Prepared By',
+  chiefOfHospitalName: 'OLIVIA A. DANDAN, MD., MPH',
+  chiefOfHospitalTitle: 'Chief of Hospital II',
+  facilityName: 'CEBU PROVINCIAL HOSPITAL - BALAMBAN',
+  facilityAddress: 'Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344',
+  hciNo: 'H07020344'
+};
 
 export default function DoctorSummaryPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
+  const [signatories, setSignatories] = useState<HospitalSignatories>(defaultSignatories);
 
   useEffect(() => {
-    const saved = localStorage.getItem('cph_cases_data');
-    if (saved) {
-      try {
-        setCases(JSON.parse(saved));
-      } catch (e) {}
+    const savedCases = localStorage.getItem('cph_cases_data');
+    if (savedCases) {
+      try { setCases(JSON.parse(savedCases)); } catch (e) {}
+    }
+
+    const savedSignatories = localStorage.getItem('cph_hospital_signatories');
+    if (savedSignatories) {
+      try { setSignatories(JSON.parse(savedSignatories)); } catch (e) {}
     }
   }, []);
 
@@ -81,6 +105,14 @@ export default function DoctorSummaryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {!isDoctorRole && (
+            <Link
+              href="/settings"
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+            >
+              <SettingsIcon className="w-3.5 h-3.5 text-slate-500" /> Edit Signatories
+            </Link>
+          )}
           {filteredDoctors.length > 0 && (
             <button
               onClick={() => exportDoctorSummaryToPdf(filteredDoctors, selectedMonth)}
@@ -196,7 +228,7 @@ export default function DoctorSummaryPage() {
         )}
       </div>
 
-      {/* Official Doctor Payslip Modal with Clean Print Layout */}
+      {/* Official Doctor Payslip Modal with Custom Configurable Signatories */}
       {selectedDoctorForSlip && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 print-modal-backdrop">
           <div className="bg-white rounded-xl max-w-2xl w-full p-8 shadow-2xl border border-slate-200 print-container">
@@ -205,19 +237,27 @@ export default function DoctorSummaryPage() {
               <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
                 Official PhilHealth Payslip Voucher
               </span>
-              <button
-                onClick={() => setSelectedDoctorForSlip(null)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/settings"
+                  className="text-xs text-slate-500 hover:text-emerald-700 flex items-center gap-1 font-semibold"
+                >
+                  <SettingsIcon className="w-3.5 h-3.5" /> Edit Signatories
+                </Link>
+                <button
+                  onClick={() => setSelectedDoctorForSlip(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Official Hospital Formal Header (Visible on Screen and Print) */}
             <div className="text-center border-b-2 border-slate-900 pb-4 mb-4">
               <p className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Republic of the Philippines • Province of Cebu</p>
-              <h2 className="text-lg font-black text-slate-900 tracking-wide mt-0.5">CEBU PROVINCIAL HOSPITAL - BALAMBAN</h2>
-              <p className="text-[11px] text-slate-600 font-medium">Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344</p>
+              <h2 className="text-lg font-black text-slate-900 tracking-wide mt-0.5">{signatories.facilityName || 'CEBU PROVINCIAL HOSPITAL - BALAMBAN'}</h2>
+              <p className="text-[11px] text-slate-600 font-medium">{signatories.facilityAddress || 'Aliwan, Balamban, Cebu • PHIC Accredited Facility # H07020344'}</p>
               <div className="mt-2.5 inline-block bg-slate-900 text-white px-4 py-1 rounded text-xs font-bold uppercase tracking-wider">
                 PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER
               </div>
@@ -276,18 +316,18 @@ export default function DoctorSummaryPage() {
               </tbody>
             </table>
 
-            {/* Official Hospital Signatories */}
+            {/* Official Hospital Signatories - Loaded Dynamically from Settings */}
             <div className="grid grid-cols-3 gap-6 pt-6 border-t border-slate-300 text-center text-xs mt-4">
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
-                <p className="font-bold text-slate-900 mt-1 uppercase">{user?.name || 'EDILOU'}</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Prepared By</p>
+                <p className="font-bold text-slate-900 mt-1 uppercase">{signatories.preparedByName || user?.name || 'EDILOU'}</p>
+                <p className="text-[10px] text-slate-500 font-semibold">{signatories.preparedByTitle || 'Prepared By'}</p>
               </div>
 
               <div>
                 <div className="border-b border-slate-400 pb-8"></div>
-                <p className="font-bold text-slate-900 mt-1">OLIVIA A. DANDAN, MD., MPH</p>
-                <p className="text-[10px] text-slate-500 font-semibold">Chief of Hospital</p>
+                <p className="font-bold text-slate-900 mt-1">{signatories.chiefOfHospitalName || 'OLIVIA A. DANDAN, MD., MPH'}</p>
+                <p className="text-[10px] text-slate-500 font-semibold">{signatories.chiefOfHospitalTitle || 'Chief of Hospital II'}</p>
               </div>
 
               <div>

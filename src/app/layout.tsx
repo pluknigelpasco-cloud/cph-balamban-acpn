@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PeriodProvider, usePeriod } from '@/context/PeriodContext';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog, Stethoscope } from 'lucide-react';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog, Stethoscope, Settings } from 'lucide-react';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -140,11 +140,20 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
-          {hasPermission('users') && (
+          {!isDoctor && (
             <>
               <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                Administration
+                Administration & Settings
               </div>
+              <Link
+                href="/settings"
+                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                  pathname === '/settings' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <Settings className="w-4 h-4 text-amber-400" />
+                Signatories & Settings
+              </Link>
               <Link
                 href="/users"
                 className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
