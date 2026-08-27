@@ -1,20 +1,3 @@
-export interface ClaimItem {
-  pabn: string;
-  series: string;
-  pin: string;
-  patientName: string;
-  period: string;
-  caserate1?: { code: string; gross: number };
-  caserate2?: { code: string; gross: number };
-  others?: { code: string; gross: number };
-  totalGross: number;
-  wtax: number;
-  hci: number;
-  pf: number;
-  doctors: string[];
-  status: string;
-}
-
 export interface CaseItem {
   id: string;
   itemNo: string;
@@ -23,38 +6,43 @@ export interface CaseItem {
   anesth: string;
   imPediaGp: string;
   remarks: string;
-  provider?: number;
-  btlFp?: number;
   totalAmount: number;
   forPool: number;
   balance: number;
-  providerTotal?: number;
-  providerShare?: number;
-  teamShare?: number;
-  icu?: number;
-  nicu?: number;
-  perinat?: number;
-  afterPoolProvider?: number;
-  pedia?: number;
-  im?: number;
-  afterImPedia?: number;
   surgeonShare: number;
   anesthShare: number;
+  im?: number;
+  pedia?: number;
   hemo?: number;
   hemoIm?: number;
+  providerTotal?: number;
+  afterPoolProvider?: number;
+  afterImPedia?: number;
   month?: string;
   isArchived?: boolean;
 }
 
-export interface PmCase {
-  itemNo: string;
+export interface ClaimItem {
+  pabn: string;
+  series: string;
+  pin: string;
   patientName: string;
-  surgeon: string;
-  anesth: string;
-  remarks: string;
-  totalAmount: number;
-  forPool: number;
-  balance: number;
+  period: string;
+  totalGross: number;
+  wtax: number;
+  hci: number;
+  pf: number;
+  doctors: string[];
+  status: string;
+}
+
+export interface DoctorSummaryItem {
+  doctorName: string;
+  specialty: string;
+  totalCases: number;
+  grossPf: number;
+  wtax20: number;
+  netPf: number;
 }
 
 export interface DoctorHourShare {
@@ -65,19 +53,12 @@ export interface DoctorHourShare {
   share: number;
 }
 
-export interface BtlShare {
-  doctor: string;
-  amount: number;
-  equalShare: number;
-}
-
-export interface DoctorSummaryItem {
-  doctorName: string;
-  specialty: string;
-  totalCases: number;
-  grossPf: number;
-  wtax20: number;
-  netPf: number;
-  medicalShare?: number;
-  nonMedicalShare?: number;
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'billing' | 'doctor' | 'staff';
+  doctorName?: string;
+  permissions?: string[];
+  status: 'active' | 'inactive';
 }

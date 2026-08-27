@@ -10,7 +10,7 @@ import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download,
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user: currentUser, logout } = useAuth();
+  const { user: currentUser, logout, hasPermission } = useAuth();
   const { selectedMonth, setSelectedMonth, monthsList } = usePeriod();
   const [showDocsModal, setShowDocsModal] = useState(false);
 
@@ -23,7 +23,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
+      <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0 no-print">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-emerald-600 rounded-lg shadow-sm">
@@ -58,23 +58,25 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </select>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation Filtered by Granted Permissions */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {isDoctor ? 'My Doctor Portal' : 'Overview & Claims'}
           </div>
 
-          <Link
-            href="/"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4 text-emerald-400" />
-            {isDoctor ? 'My Overview' : 'Executive Dashboard'}
-          </Link>
+          {hasPermission('dashboard') && (
+            <Link
+              href="/"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+              {isDoctor ? 'My Overview' : 'Executive Dashboard'}
+            </Link>
+          )}
 
-          {!isDoctor && (
+          {hasPermission('upload') && (
             <Link
               href="/upload"
               className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
@@ -86,41 +88,47 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
-          <Link
-            href="/cases"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/cases' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-            {isDoctor ? 'My Assigned Cases' : 'Cases Master Grid'}
-          </Link>
+          {hasPermission('cases') && (
+            <Link
+              href="/cases"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/cases' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+              {isDoctor ? 'My Assigned Cases' : 'Cases Master Grid'}
+            </Link>
+          )}
 
           <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {isDoctor ? 'My Shares & Payslips' : 'Sharing & Distributions'}
           </div>
 
-          <Link
-            href="/doctor-summary"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/doctor-summary' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4 text-teal-400" />
-            {isDoctor ? 'My PF & Payslip' : 'Doctor PF & 20% WTax'}
-          </Link>
+          {hasPermission('doctor_summary') && (
+            <Link
+              href="/doctor-summary"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/doctor-summary' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4 text-teal-400" />
+              {isDoctor ? 'My PF & Payslip' : 'Doctor PF & 20% WTax'}
+            </Link>
+          )}
 
-          <Link
-            href="/departments"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/departments' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Layers className="w-4 h-4 text-purple-400" />
-            {isDoctor ? 'Department Shares' : 'Department Shares'}
-          </Link>
+          {hasPermission('departments') && (
+            <Link
+              href="/departments"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/departments' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Layers className="w-4 h-4 text-purple-400" />
+              Department Shares
+            </Link>
+          )}
 
-          {!isDoctor && (
+          {hasPermission('export') && (
             <Link
               href="/export"
               className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
@@ -132,7 +140,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           )}
 
-          {!isDoctor && (
+          {hasPermission('users') && (
             <>
               <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                 Administration
@@ -144,7 +152,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <UserCog className="w-4 h-4 text-rose-400" />
-                User Management
+                User & Permissions
               </Link>
             </>
           )}
@@ -173,7 +181,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 {isDoctor ? (currentUser?.doctorName || currentUser?.name) : (currentUser?.name || 'Admin')}
               </p>
               <p className="text-[9px] text-emerald-400 uppercase font-semibold">
-                {isDoctor ? 'Doctor Portal' : (currentUser?.role || 'Admin')}
+                {isDoctor ? 'Doctor' : (currentUser?.role || 'Admin')}
               </p>
             </div>
           </div>
@@ -189,7 +197,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
-        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shrink-0">
+        <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shrink-0 no-print">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500 font-medium">Active Period:</span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">

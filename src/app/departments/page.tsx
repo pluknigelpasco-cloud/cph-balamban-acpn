@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
-import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw, ShieldAlert, Lock } from 'lucide-react';
 import { computeNicuHours, computePediaImHours } from '@/lib/computationEngine';
 import { OFFICIAL_DOCTORS_ROSTER } from '@/lib/acpnParser';
+import Link from 'next/link';
 
 interface HemoEntry {
   id: string;
@@ -17,10 +19,15 @@ interface HemoEntry {
 
 export default function DepartmentsPage() {
   const { selectedMonth } = usePeriod();
+  const { user, hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState<'hemo' | 'nicu' | 'pedia-im' | 'btl' | 'pm'>('hemo');
   const [showArchived, setShowArchived] = useState(false);
 
-  // Clean, official deduplicated doctor list
+  const isDoctorRole = user?.role === 'doctor';
+  const canManageDepartments = user?.role === 'admin' || user?.role === 'billing';
+  const canViewDepartments = hasPermission('departments');
+
+  // Clean doctor roster
   const doctorList = OFFICIAL_DOCTORS_ROSTER;
 
   // HEMO state
@@ -74,32 +81,54 @@ export default function DepartmentsPage() {
   // Add / Edit modals state
   const [isAddingHemo, setIsAddingHemo] = useState(false);
   const [editingHemo, setEditingHemo] = useState<HemoEntry | null>(null);
-  const [hemoFormDoc, setHemoFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[20]); // TACALDO
+  const [hemoFormDoc, setHemoFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[20]);
   const [hemoFormMins, setHemoFormMins] = useState(600);
   const [hemoFormMult, setHemoFormMult] = useState(1.0);
 
   const [isAddingNicu, setIsAddingNicu] = useState(false);
-  const [nicuFormName, setNicuFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]); // CASTRO
+  const [nicuFormName, setNicuFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]);
   const [nicuFormRole, setNicuFormRole] = useState('pedia');
   const [nicuFormStatus, setNicuFormStatus] = useState('jo');
   const [nicuFormHours, setNicuFormHours] = useState(180);
 
   const [isAddingPedia, setIsAddingPedia] = useState(false);
-  const [pediaFormName, setPediaFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]); // CASTRO
+  const [pediaFormName, setPediaFormName] = useState(OFFICIAL_DOCTORS_ROSTER[3]);
   const [pediaFormHours, setPediaFormHours] = useState(150);
 
   const [isAddingBtl, setIsAddingBtl] = useState(false);
-  const [btlFormDoc, setBtlFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[9]); // KHO
+  const [btlFormDoc, setBtlFormDoc] = useState(OFFICIAL_DOCTORS_ROSTER[9]);
   const [btlFormAmount, setBtlFormAmount] = useState(5000);
 
   const [isAddingPm, setIsAddingPm] = useState(false);
   const [pmFormPatient, setPmFormPatient] = useState('');
-  const [pmFormSurgeon, setPmFormSurgeon] = useState(OFFICIAL_DOCTORS_ROSTER[1]); // ARDIENTE
-  const [pmFormAnesth, setPmFormAnesth] = useState(OFFICIAL_DOCTORS_ROSTER[14]); // MORALDE
+  const [pmFormSurgeon, setPmFormSurgeon] = useState(OFFICIAL_DOCTORS_ROSTER[1]);
+  const [pmFormAnesth, setPmFormAnesth] = useState(OFFICIAL_DOCTORS_ROSTER[14]);
   const [pmFormAmount, setPmFormAmount] = useState(16380);
+
+  // If user does not have permission, block access
+  if (!canViewDepartments && isDoctorRole) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-4">
+        <div className="p-4 bg-amber-50 rounded-full text-amber-600">
+          <ShieldAlert className="w-12 h-12" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Department Shares is Restricted for Doctor Accounts</h2>
+        <p className="text-xs text-slate-500 max-w-md">
+          Departmental sharing matrices (HEMO, NICU, Pedia-IM, BTL, PM) are managed exclusively by Hospital Administration & Billing.
+        </p>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800"
+        >
+          Return to My Dashboard
+        </Link>
+      </div>
+    );
+  }
 
   // HEMO CRUD
   const handleSaveHemo = () => {
+    if (!canManageDepartments) return alert('Permission denied: Doctors cannot modify department shares.');
     if (!hemoFormDoc) return alert('Please select a Doctor');
     let updated: HemoEntry[] = [];
     if (editingHemo) {
@@ -111,7 +140,7 @@ export default function DepartmentsPage() {
         doctor: hemoFormDoc,
         minutes: hemoFormMins,
         multiplier: hemoFormMult,
-        month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth,
+        month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth,
         isArchived: false
       }];
       setIsAddingHemo(false);
@@ -121,12 +150,14 @@ export default function DepartmentsPage() {
   };
 
   const handleToggleArchiveHemo = (id: string) => {
+    if (!canManageDepartments) return alert('Permission denied');
     const updated = hemoEntries.map(h => h.id === id ? { ...h, isArchived: !h.isArchived } : h);
     setHemoEntries(updated);
     localStorage.setItem('cph_dept_hemo', JSON.stringify(updated));
   };
 
   const handleDeleteHemo = (id: string) => {
+    if (!canManageDepartments) return alert('Permission denied');
     if (confirm('Delete this HEMO entry?')) {
       const updated = hemoEntries.filter(h => h.id !== id);
       setHemoEntries(updated);
@@ -139,6 +170,7 @@ export default function DepartmentsPage() {
   const computedNicu = computeNicuHours(totalNicuCasesAmount, nicuSpecialistRate, activeNicuList);
 
   const handleSaveNicu = () => {
+    if (!canManageDepartments) return alert('Permission denied');
     if (!nicuFormName) return alert('Select Doctor Name');
     const updated = [...nicuDocs, {
       id: `nicu-${Date.now()}`,
@@ -147,7 +179,7 @@ export default function DepartmentsPage() {
       status: nicuFormStatus,
       hours: nicuFormHours,
       share: 0,
-      month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth,
+      month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth,
       isArchived: false
     }];
     setNicuDocs(updated);
@@ -160,6 +192,7 @@ export default function DepartmentsPage() {
   const computedPedia = computePediaImHours(totalPediaPool, activePediaList);
 
   const handleSavePedia = () => {
+    if (!canManageDepartments) return alert('Permission denied');
     if (!pediaFormName) return alert('Select Doctor Name');
     const updated = [...pediaDocs, {
       id: `ped-${Date.now()}`,
@@ -168,7 +201,7 @@ export default function DepartmentsPage() {
       status: 'jo',
       hours: pediaFormHours,
       share: 0,
-      month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth,
+      month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth,
       isArchived: false
     }];
     setPediaDocs(updated);
@@ -179,13 +212,14 @@ export default function DepartmentsPage() {
   // BTL CRUD
   const activeBtlList = btlList.filter(d => (showArchived ? d.isArchived : !d.isArchived) && (selectedMonth === 'ALL' || d.month === selectedMonth));
   const handleSaveBtl = () => {
+    if (!canManageDepartments) return alert('Permission denied');
     if (!btlFormDoc) return alert('Select Doctor Name');
     const updated = [...btlList, {
       id: `btl-${Date.now()}`,
       doctor: btlFormDoc,
       amount: btlFormAmount,
       equalShare: btlFormAmount / 11,
-      month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth,
+      month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth,
       isArchived: false
     }];
     setBtlList(updated);
@@ -196,6 +230,7 @@ export default function DepartmentsPage() {
   // PM CRUD
   const activePmList = pmCases.filter(d => (showArchived ? d.isArchived : !d.isArchived) && (selectedMonth === 'ALL' || d.month === selectedMonth));
   const handleSavePm = () => {
+    if (!canManageDepartments) return alert('Permission denied');
     if (!pmFormPatient) return alert('Enter Patient Name');
     const pool = pmFormAmount * 0.20;
     const updated = [...pmCases, {
@@ -208,7 +243,7 @@ export default function DepartmentsPage() {
       totalAmount: pmFormAmount,
       forPool: pool,
       balance: pmFormAmount - pool,
-      month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth,
+      month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth,
       isArchived: false
     }];
     setPmCases(updated);
@@ -226,24 +261,33 @@ export default function DepartmentsPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               PERIOD: {selectedMonth}
             </span>
-            <span className="text-xs text-slate-500">Clean Master Doctor Roster ({doctorList.length} Physicians)</span>
+            {!canManageDepartments && (
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 flex items-center gap-1">
+                <Lock className="w-3 h-3" /> Read-Only View
+              </span>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Department Sharing Center</h1>
           <p className="text-sm text-slate-500">
-            Select accredited physicians from the clean dropdown roster to calculate departmental distributions.
+            {canManageDepartments
+              ? 'Manage departmental sharing formulas, attendances, and pro-rata distributions.'
+              : 'Official departmental distribution matrix (Managed by Hospital Administration).'
+            }
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-              showArchived ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-            }`}
-          >
-            <Archive className="w-3.5 h-3.5" />
-            {showArchived ? 'Active Records' : 'View Archived'}
-          </button>
+          {canManageDepartments && (
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                showArchived ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {showArchived ? 'Active Records' : 'View Archived'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -303,12 +347,14 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">Hemodialysis (HEMO) Attending Rate Matrix</h2>
               <p className="text-xs text-slate-500">Formula: Rate per minute = Total HEMO-IM Share / Total Calculated Minutes</p>
             </div>
-            <button
-              onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(OFFICIAL_DOCTORS_ROSTER[20]); }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Add HEMO Doctor Entry
-            </button>
+            {canManageDepartments && (
+              <button
+                onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(OFFICIAL_DOCTORS_ROSTER[20]); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Add HEMO Doctor Entry
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -316,9 +362,10 @@ export default function DepartmentsPage() {
               <span className="text-slate-500 uppercase font-bold text-[10px]">Total HEMO Share:</span>
               <input
                 type="number"
+                disabled={!canManageDepartments}
                 value={totalHemoShare}
                 onChange={(e) => setTotalHemoShare(parseFloat(e.target.value) || 0)}
-                className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1"
+                className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1 disabled:text-slate-800"
                 placeholder="0.00"
               />
             </div>
@@ -334,7 +381,7 @@ export default function DepartmentsPage() {
 
           {activeHemoList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No HEMO doctor entries yet for {selectedMonth}. Click "+ Add HEMO Doctor Entry" to select doctors.
+              No HEMO doctor entries recorded for {selectedMonth}.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -346,7 +393,7 @@ export default function DepartmentsPage() {
                   <th className="p-3 text-center">Multiplier</th>
                   <th className="p-3 text-right">Effective Minutes</th>
                   <th className="p-3 text-right text-emerald-300">Doctor Share (PHP)</th>
-                  <th className="p-3 text-center">Actions</th>
+                  {canManageDepartments && <th className="p-3 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -367,31 +414,33 @@ export default function DepartmentsPage() {
                       <td className="p-3 text-right font-bold text-emerald-600">
                         ₱{docShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="p-3 text-center">
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            onClick={() => { setEditingHemo(h); setHemoFormDoc(h.doctor); setHemoFormMins(h.minutes); setHemoFormMult(h.multiplier); setIsAddingHemo(true); }}
-                            className="p-1 text-slate-500 hover:text-emerald-600"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleToggleArchiveHemo(h.id)}
-                            className="p-1 text-slate-500 hover:text-amber-600"
-                            title={h.isArchived ? 'Restore' : 'Archive'}
-                          >
-                            {h.isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteHemo(h.id)}
-                            className="p-1 text-slate-500 hover:text-rose-600"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                      {canManageDepartments && (
+                        <td className="p-3 text-center">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              onClick={() => { setEditingHemo(h); setHemoFormDoc(h.doctor); setHemoFormMins(h.minutes); setHemoFormMult(h.multiplier); setIsAddingHemo(true); }}
+                              className="p-1 text-slate-500 hover:text-emerald-600"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleToggleArchiveHemo(h.id)}
+                              className="p-1 text-slate-500 hover:text-amber-600"
+                              title={h.isArchived ? 'Restore' : 'Archive'}
+                            >
+                              {h.isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteHemo(h.id)}
+                              className="p-1 text-slate-500 hover:text-rose-600"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -399,7 +448,7 @@ export default function DepartmentsPage() {
             </table>
           )}
 
-          {isAddingHemo && (
+          {isAddingHemo && canManageDepartments && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">{editingHemo ? 'Edit HEMO Doctor Entry' : 'Add HEMO Doctor Entry'}</h3>
@@ -466,12 +515,14 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">NICU / ICU Duty Hours Pro-Rata Sharing</h2>
               <p className="text-xs text-slate-500">Formula: Net Pool = Total - Dr. Rosell Cut; Share = Net Pool * (Doctor Hours / Total Hours)</p>
             </div>
-            <button
-              onClick={() => setIsAddingNicu(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Add NICU Entry
-            </button>
+            {canManageDepartments && (
+              <button
+                onClick={() => setIsAddingNicu(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Add NICU Entry
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -479,9 +530,10 @@ export default function DepartmentsPage() {
               <span className="text-slate-500 uppercase font-bold text-[10px]">Total NICU Amount:</span>
               <input
                 type="number"
+                disabled={!canManageDepartments}
                 value={totalNicuCasesAmount}
                 onChange={(e) => setTotalNicuCasesAmount(parseFloat(e.target.value) || 0)}
-                className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1"
+                className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1 disabled:text-slate-800"
                 placeholder="0.00"
               />
             </div>
@@ -489,9 +541,10 @@ export default function DepartmentsPage() {
               <span className="text-amber-700 uppercase font-bold text-[10px]">Specialist Cut (Dr. Rosell):</span>
               <input
                 type="number"
+                disabled={!canManageDepartments}
                 value={nicuSpecialistRate}
                 onChange={(e) => setNicuSpecialistRate(parseFloat(e.target.value) || 0)}
-                className="block w-full font-bold text-base bg-transparent border-b border-amber-300 focus:outline-none mt-1 text-amber-900"
+                className="block w-full font-bold text-base bg-transparent border-b border-amber-300 focus:outline-none mt-1 text-amber-900 disabled:text-amber-800"
                 placeholder="0.00"
               />
             </div>
@@ -505,7 +558,7 @@ export default function DepartmentsPage() {
 
           {activeNicuList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No NICU doctor entries yet for {selectedMonth}. Click "+ Add NICU Entry" to select doctors.
+              No NICU doctor entries recorded for {selectedMonth}.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -517,7 +570,7 @@ export default function DepartmentsPage() {
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right"># of Duty Hours</th>
                   <th className="p-3 text-right text-emerald-300">Pro-Rata Share (PHP)</th>
-                  <th className="p-3 text-center">Actions</th>
+                  {canManageDepartments && <th className="p-3 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -531,26 +584,28 @@ export default function DepartmentsPage() {
                     <td className="p-3 text-right font-bold text-emerald-600">
                       ₱{d.share.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => {
-                          const updated = nicuDocs.filter(nd => nd.name !== d.name);
-                          setNicuDocs(updated);
-                          localStorage.setItem('cph_dept_nicu', JSON.stringify(updated));
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canManageDepartments && (
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => {
+                            const updated = nicuDocs.filter(nd => nd.name !== d.name);
+                            setNicuDocs(updated);
+                            localStorage.setItem('cph_dept_nicu', JSON.stringify(updated));
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
 
-          {isAddingNicu && (
+          {isAddingNicu && canManageDepartments && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add NICU Doctor Duty Hours</h3>
@@ -595,28 +650,31 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">PEDIA & IM During Surgeries Sharing</h2>
               <p className="text-xs text-slate-500">Pro-rata sharing across pediatricians and internists based on hours</p>
             </div>
-            <button
-              onClick={() => setIsAddingPedia(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Add Pedia Entry
-            </button>
+            {canManageDepartments && (
+              <button
+                onClick={() => setIsAddingPedia(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Add Pedia Entry
+              </button>
+            )}
           </div>
 
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs max-w-sm">
             <span className="text-slate-500 uppercase font-bold text-[10px]">Total Pool To Share:</span>
             <input
               type="number"
+              disabled={!canManageDepartments}
               value={totalPediaPool}
               onChange={(e) => setTotalPediaPool(parseFloat(e.target.value) || 0)}
-              className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1"
+              className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1 disabled:text-slate-800"
               placeholder="0.00"
             />
           </div>
 
           {activePediaList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No Pedia/IM doctor entries yet for {selectedMonth}. Click "+ Add Pedia Entry" to select doctors.
+              No Pedia/IM doctor entries recorded for {selectedMonth}.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -627,7 +685,7 @@ export default function DepartmentsPage() {
                   <th className="p-3">Status</th>
                   <th className="p-3 text-right">Duty Hours</th>
                   <th className="p-3 text-right text-emerald-300">Share (PHP)</th>
-                  <th className="p-3 text-center">Actions</th>
+                  {canManageDepartments && <th className="p-3 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -640,25 +698,27 @@ export default function DepartmentsPage() {
                     <td className="p-3 text-right font-bold text-emerald-600">
                       ₱{d.share.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => {
-                          const updated = pediaDocs.filter(pd => pd.name !== d.name);
-                          setPediaDocs(updated);
-                          localStorage.setItem('cph_dept_pedia', JSON.stringify(updated));
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canManageDepartments && (
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => {
+                            const updated = pediaDocs.filter(pd => pd.name !== d.name);
+                            setPediaDocs(updated);
+                            localStorage.setItem('cph_dept_pedia', JSON.stringify(updated));
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
 
-          {isAddingPedia && (
+          {isAddingPedia && canManageDepartments && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add Pedia / IM Doctor Entry</h3>
@@ -703,17 +763,19 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">BTL-IUD Family Planning Team Equal Split</h2>
               <p className="text-xs text-slate-500">Divided equally (1/11th) across active FP team physicians</p>
             </div>
-            <button
-              onClick={() => setIsAddingBtl(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Add FP Doctor
-            </button>
+            {canManageDepartments && (
+              <button
+                onClick={() => setIsAddingBtl(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Add FP Doctor
+              </button>
+            )}
           </div>
 
           {activeBtlList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No FP team doctor entries yet for {selectedMonth}. Click "+ Add FP Doctor" to select from dropdown.
+              No FP team doctor entries recorded for {selectedMonth}.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -722,7 +784,7 @@ export default function DepartmentsPage() {
                   <th className="p-3">Team Doctor</th>
                   <th className="p-3 text-right">Generated BTL Amount</th>
                   <th className="p-3 text-right text-emerald-300">1/11 Equal Split Share</th>
-                  <th className="p-3 text-center">Actions</th>
+                  {canManageDepartments && <th className="p-3 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -731,25 +793,27 @@ export default function DepartmentsPage() {
                     <td className="p-3 font-bold text-slate-900">{item.doctor}</td>
                     <td className="p-3 text-right font-mono font-semibold">₱{item.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td className="p-3 text-right font-bold text-emerald-600">₱{item.equalShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => {
-                          const updated = btlList.filter(b => b.doctor !== item.doctor);
-                          setBtlList(updated);
-                          localStorage.setItem('cph_dept_btl', JSON.stringify(updated));
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canManageDepartments && (
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => {
+                            const updated = btlList.filter(b => b.doctor !== item.doctor);
+                            setBtlList(updated);
+                            localStorage.setItem('cph_dept_btl', JSON.stringify(updated));
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
 
-          {isAddingBtl && (
+          {isAddingBtl && canManageDepartments && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add BTL Team Doctor</h3>
@@ -794,17 +858,19 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">Pain Management (PM) Cases</h2>
               <p className="text-xs text-slate-500">Fixed 20% Pool Deduction (=F*0.20) and 80% Net Balance (=F-G)</p>
             </div>
-            <button
-              onClick={() => setIsAddingPm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <Plus className="w-4 h-4" /> Add PM Case
-            </button>
+            {canManageDepartments && (
+              <button
+                onClick={() => setIsAddingPm(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Plus className="w-4 h-4" /> Add PM Case
+              </button>
+            )}
           </div>
 
           {activePmList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No PM cases yet for {selectedMonth}. Click "+ Add PM Case" to add.
+              No PM cases recorded for {selectedMonth}.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -817,7 +883,7 @@ export default function DepartmentsPage() {
                   <th className="p-3 text-right">Total Amount</th>
                   <th className="p-3 text-right text-amber-300">20% For Pool</th>
                   <th className="p-3 text-right text-emerald-300">80% Balance</th>
-                  <th className="p-3 text-center">Actions</th>
+                  {canManageDepartments && <th className="p-3 text-center">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -830,25 +896,27 @@ export default function DepartmentsPage() {
                     <td className="p-3 text-right font-bold text-slate-900">₱{pm.totalAmount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td className="p-3 text-right font-semibold text-amber-600">₱{pm.forPool?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
                     <td className="p-3 text-right font-bold text-emerald-600">₱{pm.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
-                    <td className="p-3 text-center">
-                      <button
-                        onClick={() => {
-                          const updated = pmCases.filter(p => p.patientName !== pm.patientName);
-                          setPmCases(updated);
-                          localStorage.setItem('cph_dept_pm', JSON.stringify(updated));
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
+                    {canManageDepartments && (
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => {
+                            const updated = pmCases.filter(p => p.patientName !== pm.patientName);
+                            setPmCases(updated);
+                            localStorage.setItem('cph_dept_pm', JSON.stringify(updated));
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
 
-          {isAddingPm && (
+          {isAddingPm && canManageDepartments && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add Pain Management Case</h3>
