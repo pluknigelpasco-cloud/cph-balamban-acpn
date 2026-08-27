@@ -1,27 +1,64 @@
 import { CaseItem, DoctorSummaryItem, DoctorHourShare } from '@/types';
 
+export const OFFICIAL_EXCEL_REMARKS = [
+  '1D',
+  '49080',
+  'BTL',
+  'C/S',
+  'C/S BTL',
+  'C/S FP',
+  'D/C',
+  'Dental',
+  'FP',
+  'FP?',
+  'Hemo',
+  'HRPU',
+  'HRPU FP',
+  'ICU',
+  'ICU/IJ',
+  'IJ',
+  'IJ?',
+  'IUD',
+  'NICU',
+  'Pedia',
+  'PM'
+];
+
 export function recalculateCase(c: Partial<CaseItem>): CaseItem {
   const totalAmount = c.totalAmount || 0;
   const remarks = (c.remarks || '').trim();
-  const isHemo = remarks.toLowerCase().includes('hemo') || remarks === '90935';
+  const remUpper = remarks.toUpperCase();
+  const isHemo = remUpper.includes('HEMO') || remarks === '90935';
   const hasSurgeon = Boolean(c.surgeon && c.surgeon.trim() !== '');
   const hasAnesth = Boolean(c.anesth && c.anesth.trim() !== '');
   const hasImPedia = Boolean(c.imPediaGp && c.imPediaGp.trim() !== '');
 
-  // 1. Determine Pool Rate
+  // Determine Pool Rate based on Excel Rules
   let poolRate = 0.50; // default 50% for 1D, Dental, Solo GP
+
   if (isHemo) {
     poolRate = 0.15; // 15% Pool for Hemodialysis
-  } else if (remarks === '49080') {
+  } else if (remUpper === '49080') {
     poolRate = 0.35; // 35% pool
-  } else if (remarks === 'C/S' || remarks === 'OR Case' || remarks === 'BTL' || (hasSurgeon && hasAnesth)) {
-    poolRate = 0.20; // 20% pool for OR Cases with Surgeon & Anesth
+  } else if (
+    remUpper.includes('C/S') ||
+    remUpper.includes('OR CASE') ||
+    remUpper.includes('PM') ||
+    remUpper.includes('BTL') ||
+    remUpper.includes('IUD') ||
+    remUpper.includes('FP') ||
+    remUpper.includes('HRPU') ||
+    remUpper.includes('ICU') ||
+    remUpper.includes('NICU') ||
+    remUpper.includes('IJ') ||
+    (hasSurgeon && hasAnesth)
+  ) {
+    poolRate = 0.20; // 20% pool
   }
 
   const forPool = totalAmount * poolRate;
   const balance = totalAmount - forPool;
 
-  // 2. HEMO Specific Calculations (57.14% Hemo, 27.86% Hemo-IM)
   let hemo = 0;
   let hemoIm = 0;
   let surgeonShare = 0;
@@ -33,10 +70,9 @@ export function recalculateCase(c: Partial<CaseItem>): CaseItem {
     hemo = totalAmount * 0.5714;
     hemoIm = totalAmount * 0.2786;
   } else {
-    // Standard Surgical / Medical Sharing
     let netAfterImpedia = balance;
     if (hasImPedia && (hasSurgeon || hasAnesth)) {
-      const imPediaShare = balance * 0.10; // 10% for IM/Pedia
+      const imPediaShare = balance * 0.10; // 10% IM/Pedia
       im = imPediaShare;
       netAfterImpedia = balance - imPediaShare;
     }
@@ -45,11 +81,11 @@ export function recalculateCase(c: Partial<CaseItem>): CaseItem {
       surgeonShare = netAfterImpedia * 0.70; // 70% Surgeon
       anesthShare = netAfterImpedia * 0.30; // 30% Anesth
     } else if (hasSurgeon) {
-      surgeonShare = netAfterImpedia; // 100% Solo Surgeon / Attending
+      surgeonShare = netAfterImpedia;
     } else if (hasAnesth) {
       anesthShare = netAfterImpedia;
     } else if (hasImPedia) {
-      im = netAfterImpedia; // Solo Attending Physician
+      im = netAfterImpedia;
     }
   }
 
@@ -60,7 +96,7 @@ export function recalculateCase(c: Partial<CaseItem>): CaseItem {
     surgeon: c.surgeon || '',
     anesth: c.anesth || '',
     imPediaGp: c.imPediaGp || '',
-    remarks: isHemo ? 'Hemo' : (c.remarks || '1D'),
+    remarks: c.remarks || '1D',
     totalAmount,
     forPool,
     balance,
@@ -79,7 +115,6 @@ export function computeDoctorSummary(cases: CaseItem[]): DoctorSummaryItem[] {
   const map = new Map<string, { grossPf: number; totalCases: number; specialty: string }>();
 
   cases.forEach(c => {
-    // 1. Surgeon
     if (c.surgeon && c.surgeon.trim() !== '') {
       const s = c.surgeon.trim();
       const share = c.surgeonShare || 0;
@@ -91,7 +126,6 @@ export function computeDoctorSummary(cases: CaseItem[]): DoctorSummaryItem[] {
       });
     }
 
-    // 2. Anesth
     if (c.anesth && c.anesth.trim() !== '') {
       const a = c.anesth.trim();
       const share = c.anesthShare || 0;
@@ -103,7 +137,6 @@ export function computeDoctorSummary(cases: CaseItem[]): DoctorSummaryItem[] {
       });
     }
 
-    // 3. IM / Pedia / Hemo-IM
     if (c.imPediaGp && c.imPediaGp.trim() !== '') {
       const im = c.imPediaGp.trim();
       const share = (c.im || 0) + (c.pedia || 0) + (c.hemoIm || 0);

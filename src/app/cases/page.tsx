@@ -4,10 +4,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
-import { recalculateCase } from '@/lib/computationEngine';
+import { recalculateCase, OFFICIAL_EXCEL_REMARKS } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
 import { OFFICIAL_DOCTORS_ROSTER, sanitizeDoctorName } from '@/lib/acpnParser';
-import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
+import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity, Filter } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CasesPage() {
@@ -56,13 +56,13 @@ export default function CasesPage() {
     return Array.from(set).sort();
   }, [cases]);
 
-  // Distinct Remarks list (e.g. ALL, Hemo, C/S, 1D, 49080, FP, Dental)
+  // All 21 Excel Remarks
   const remarkOptions = useMemo(() => {
-    const set = new Set<string>(['Hemo', 'C/S', '1D', '49080', 'FP', 'OR Case', 'Dental']);
+    const set = new Set<string>(OFFICIAL_EXCEL_REMARKS);
     cases.forEach(c => {
-      if (c.remarks) set.add(c.remarks.trim());
+      if (c.remarks && c.remarks.trim()) set.add(c.remarks.trim());
     });
-    return Array.from(set).filter(Boolean).sort();
+    return Array.from(set).sort();
   }, [cases]);
 
   const filteredCases = useMemo(() => {
@@ -179,7 +179,7 @@ export default function CasesPage() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
             <p className="text-xs text-slate-500">
-              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> claims for <strong className="text-slate-800">{selectedMonth}</strong> with live Hemo & Surgeon distributions.
+              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> claims for <strong className="text-slate-800">{selectedMonth}</strong> ({remarkOptions.length} distinct Excel remark types).
             </p>
           </div>
 
@@ -223,13 +223,13 @@ export default function CasesPage() {
           </div>
         </div>
 
-        {/* Filter Bar with Remark / Hemo Dropdown */}
+        {/* Filter Bar with all 21 Excel Remarks */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search patient, doctor, hemo, #..."
+              placeholder="Search patient, doctor, remark, #..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
@@ -240,16 +240,24 @@ export default function CasesPage() {
             <select
               value={selectedRemark}
               onChange={(e) => setSelectedRemark(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-800"
+              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 font-bold text-slate-800"
             >
-              <option value="ALL">🔍 All Case Types / Remarks ({remarkOptions.length})</option>
-              <option value="Hemo">🫘 Hemodialysis (Hemo)</option>
-              <option value="C/S">👶 Cesarean (C/S)</option>
-              <option value="OR Case">🩺 Major OR Cases</option>
-              <option value="FP">👥 Family Planning (FP)</option>
-              <option value="1D">📋 1D Cases</option>
-              <option value="49080">💊 49080 (35% Pool)</option>
-              <option value="Dental">🦷 Dental</option>
+              <option value="ALL">🔍 All Excel Remarks ({remarkOptions.length} Types)</option>
+              {remarkOptions.map((rem) => (
+                <option key={rem} value={rem}>
+                  {rem === 'Hemo' ? '🫘 Hemo (Hemodialysis)' :
+                   rem === 'C/S' ? '👶 C/S (Cesarean)' :
+                   rem === 'NICU' ? '🍼 NICU' :
+                   rem === 'ICU' ? '🏥 ICU' :
+                   rem === 'PM' ? '❤️ PM (Pain Management)' :
+                   rem === 'BTL' ? '👥 BTL' :
+                   rem === 'FP' ? '👥 FP (Family Planning)' :
+                   rem === '49080' ? '💊 49080 (35% Pool)' :
+                   rem === '1D' ? '📋 1D Case' :
+                   rem === 'Dental' ? '🦷 Dental' :
+                   rem}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -272,7 +280,7 @@ export default function CasesPage() {
         </div>
       </div>
 
-      {/* Spreadsheet Data Grid with HEMO & HEMO-IM Exact Columns */}
+      {/* Spreadsheet Data Grid */}
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         {filteredCases.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
@@ -281,7 +289,7 @@ export default function CasesPage() {
             </div>
             <h3 className="font-bold text-base text-slate-900">Cases Grid is Clean & Ready for {selectedMonth}</h3>
             <p className="text-xs text-slate-500 max-w-sm">
-              Upload your official PhilHealth ACPN PDF or click "+ Add Hemo Case" to populate cases.
+              Upload your official PhilHealth ACPN PDF or click "+ Add Hemo Case" / "+ Add OR Case" to populate cases.
             </p>
             <div className="flex gap-2 pt-2">
               <Link
@@ -308,7 +316,7 @@ export default function CasesPage() {
                   <th className="p-2.5 border-r border-slate-800 min-w-[130px]">SURGEON</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[130px]">ANESTH</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[140px]">IM / PEDIA / GP</th>
-                  <th className="p-2.5 border-r border-slate-800 w-24 text-center">REMARK</th>
+                  <th className="p-2.5 border-r border-slate-800 w-28 text-center">REMARK</th>
                   <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">TOTAL AMOUNT</th>
                   <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">FOR POOL</th>
                   <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">BALANCE</th>
@@ -372,13 +380,9 @@ export default function CasesPage() {
                             'bg-slate-100 text-slate-700 border-slate-200'
                           }`}
                         >
-                          <option value="Hemo">Hemo</option>
-                          <option value="1D">1D</option>
-                          <option value="C/S">C/S</option>
-                          <option value="OR Case">OR Case</option>
-                          <option value="49080">49080</option>
-                          <option value="FP">FP</option>
-                          <option value="Dental">Dental</option>
+                          {OFFICIAL_EXCEL_REMARKS.map(rem => (
+                            <option key={rem} value={rem}>{rem}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
@@ -433,7 +437,7 @@ export default function CasesPage() {
           </div>
         )}
 
-        {/* Footer Summary Row with Hemo Splits */}
+        {/* Footer Summary Row */}
         {filteredCases.length > 0 && (
           <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
             <div className="flex items-center gap-4">
