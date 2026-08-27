@@ -1,25 +1,35 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import initialData from '@/lib/initialData.json';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem, DoctorSummaryItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
-import { Search, Download, Printer, Users, DollarSign, FileText, Calendar } from 'lucide-react';
+import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud } from 'lucide-react';
+import Link from 'next/link';
 
 export default function DoctorSummaryPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
-  const [cases] = useState<CaseItem[]>(initialData.casesData as CaseItem[]);
+  const [cases, setCases] = useState<CaseItem[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('cph_cases_data');
+    if (saved) {
+      try {
+        setCases(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoctorForSlip, setSelectedDoctorForSlip] = useState<DoctorSummaryItem | null>(null);
 
   const isDoctorRole = user?.role === 'doctor';
   const doctorName = user?.doctorName || '';
 
-  // Compute doctor summaries
+  // Compute doctor summaries from current cases
   const doctorSummaries = useMemo(() => {
     return computeDoctorSummary(cases);
   }, [cases]);
@@ -54,12 +64,14 @@ export default function DoctorSummaryPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => exportDoctorSummaryToPdf(filteredDoctors, selectedMonth)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
-          >
-            <Download className="w-4 h-4" /> Download {selectedMonth} PDF Report
-          </button>
+          {filteredDoctors.length > 0 && (
+            <button
+              onClick={() => exportDoctorSummaryToPdf(filteredDoctors, selectedMonth)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
+            >
+              <Download className="w-4 h-4" /> Download {selectedMonth} PDF Report
+            </button>
+          )}
         </div>
       </div>
 
@@ -96,49 +108,67 @@ export default function DoctorSummaryPage() {
         />
       </div>
 
-      {/* Doctor Summary Table */}
+      {/* Doctor Summary Table or Clean Empty State */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-slate-900 text-white font-semibold">
-            <tr>
-              <th className="p-3 w-12 text-center">#</th>
-              <th className="p-3 min-w-[200px]">Doctor Name</th>
-              <th className="p-3 min-w-[150px]">Specialty / Role</th>
-              <th className="p-3 text-center">Cases</th>
-              <th className="p-3 text-right">Gross PF</th>
-              <th className="p-3 text-right text-amber-300">20% WTax</th>
-              <th className="p-3 text-right text-emerald-300 font-bold">Net PF (Payable)</th>
-              <th className="p-3 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {filteredDoctors.map((doc, idx) => (
-              <tr key={idx} className="hover:bg-slate-50">
-                <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
-                <td className="p-3 font-bold text-slate-900">{doc.doctorName}</td>
-                <td className="p-3 text-slate-600">{doc.specialty}</td>
-                <td className="p-3 text-center font-mono font-medium text-slate-700">{doc.totalCases}</td>
-                <td className="p-3 text-right font-semibold text-slate-900">
-                  ₱{doc.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </td>
-                <td className="p-3 text-right font-medium text-amber-700">
-                  ₱{doc.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </td>
-                <td className="p-3 text-right font-bold text-emerald-700">
-                  ₱{doc.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </td>
-                <td className="p-3 text-center">
-                  <button
-                    onClick={() => setSelectedDoctorForSlip(doc)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-[11px] font-semibold transition"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> Printable Payslip
-                  </button>
-                </td>
+        {filteredDoctors.length === 0 ? (
+          <div className="p-10 text-center space-y-3">
+            <div className="p-4 bg-slate-50 text-slate-400 rounded-full inline-block">
+              <Users className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-base text-slate-900">No Doctor Compensation Data Yet</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Upload an ACPN PDF to generate verified doctor earnings, withholding taxes, and printable payslips.
+            </p>
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition"
+            >
+              <UploadCloud className="w-4 h-4" /> Go to Upload Page
+            </Link>
+          </div>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-900 text-white font-semibold">
+              <tr>
+                <th className="p-3 w-12 text-center">#</th>
+                <th className="p-3 min-w-[200px]">Doctor Name</th>
+                <th className="p-3 min-w-[150px]">Specialty / Role</th>
+                <th className="p-3 text-center">Cases</th>
+                <th className="p-3 text-right">Gross PF</th>
+                <th className="p-3 text-right text-amber-300">20% WTax</th>
+                <th className="p-3 text-right text-emerald-300 font-bold">Net PF (Payable)</th>
+                <th className="p-3 text-center">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {filteredDoctors.map((doc, idx) => (
+                <tr key={idx} className="hover:bg-slate-50">
+                  <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                  <td className="p-3 font-bold text-slate-900">{doc.doctorName}</td>
+                  <td className="p-3 text-slate-600">{doc.specialty}</td>
+                  <td className="p-3 text-center font-mono font-medium text-slate-700">{doc.totalCases}</td>
+                  <td className="p-3 text-right font-semibold text-slate-900">
+                    ₱{doc.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="p-3 text-right font-medium text-amber-700">
+                    ₱{doc.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="p-3 text-right font-bold text-emerald-700">
+                    ₱{doc.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="p-3 text-center">
+                    <button
+                      onClick={() => setSelectedDoctorForSlip(doc)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-[11px] font-semibold transition"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-600" /> Printable Payslip
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Doctor Payslip Modal with Active Month */}

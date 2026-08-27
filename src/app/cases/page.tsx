@@ -1,29 +1,34 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import initialData from '@/lib/initialData.json';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { recalculateCase } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
-import { Search, Filter, Download, Plus, Archive, Trash2, RotateCcw } from 'lucide-react';
+import { Search, Filter, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud } from 'lucide-react';
+import Link from 'next/link';
 
 export default function CasesPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
-  const [cases, setCases] = useState<CaseItem[]>((initialData.casesData as any).map((c: any) => ({
-    ...c,
-    month: 'JUNE 2026',
-    isArchived: false
-  })));
+  const [cases, setCases] = useState<CaseItem[]>([]);
+
+  // Load from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('cph_cases_data');
+    if (saved) {
+      try {
+        setCases(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('ALL');
   const [selectedRemark, setSelectedRemark] = useState('ALL');
   const [showArchived, setShowArchived] = useState(false);
 
-  // If user is a Doctor, pre-filter by doctor
   const isDoctorRole = user?.role === 'doctor';
   const doctorName = user?.doctorName || '';
 
@@ -47,19 +52,12 @@ export default function CasesPage() {
     return Array.from(set).sort();
   }, [cases]);
 
-  // Filtered cases
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
-      // Month match
-      const matchesMonth = selectedMonth === 'ALL' || (c as any).month === selectedMonth;
-
-      // Archive status match
+      const matchesMonth = selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month;
       const matchesArchive = showArchived ? (c as any).isArchived : !(c as any).isArchived;
-
-      // Doctor role match
       const matchesDoctorRole = !isDoctorRole || c.surgeon.includes(doctorName) || c.anesth.includes(doctorName) || (c.imPediaGp && c.imPediaGp.includes(doctorName));
 
-      // Search term
       const matchesSearch =
         searchTerm === '' ||
         c.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -67,14 +65,12 @@ export default function CasesPage() {
         (c.surgeon && c.surgeon.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.anesth && c.anesth.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Dropdown doctor
       const matchesDoctor =
         selectedDoctor === 'ALL' ||
         c.surgeon === selectedDoctor ||
         c.anesth === selectedDoctor ||
         (c.imPediaGp && c.imPediaGp.includes(selectedDoctor));
 
-      // Dropdown remark
       const matchesRemark =
         selectedRemark === 'ALL' ||
         c.remarks === selectedRemark;
@@ -83,23 +79,37 @@ export default function CasesPage() {
     });
   }, [cases, selectedMonth, showArchived, isDoctorRole, doctorName, searchTerm, selectedDoctor, selectedRemark]);
 
+  const updateAndPersist = (updatedCases: CaseItem[]) => {
+    setCases(updatedCases);
+    localStorage.setItem('cph_cases_data', JSON.stringify(updatedCases));
+  };
+
   const handleUpdateRow = (id: string, field: keyof CaseItem, value: any) => {
-    setCases(prev => prev.map(item => {
+    const updated = cases.map(item => {
       if (item.id === id) {
-        const updated = { ...item, [field]: value };
-        return recalculateCase(updated);
+        const itemUpdated = { ...item, [field]: value };
+        return recalculateCase(itemUpdated);
       }
       return item;
-    }));
+    });
+    updateAndPersist(updated);
   };
 
   const handleToggleArchive = (id: string) => {
-    setCases(prev => prev.map(c => c.id === id ? { ...c, isArchived: !(c as any).isArchived } as any : c));
+    const updated = cases.map(c => c.id === id ? { ...c, isArchived: !(c as any).isArchived } as any : c);
+    updateAndPersist(updated);
   };
 
   const handleDeleteCase = (id: string) => {
-    if (confirm('Are you sure you want to permanently delete this case?')) {
-      setCases(prev => prev.filter(c => c.id !== id));
+    if (confirm('Delete this case?')) {
+      const updated = cases.filter(c => c.id !== id);
+      updateAndPersist(updated);
+    }
+  };
+
+  const handleResetAllCases = () => {
+    if (confirm('Are you sure you want to CLEAR all cases? This allows you to start 100% fresh from your uploaded PDFs.')) {
+      updateAndPersist([]);
     }
   };
 
@@ -114,7 +124,8 @@ export default function CasesPage() {
       remarks: '1D',
       totalAmount: 10000,
     });
-    setCases([{ ...newCase, month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth, isArchived: false } as any, ...cases]);
+    const updated = [{ ...newCase, month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth, isArchived: false } as any, ...cases];
+    updateAndPersist(updated);
   };
 
   const sumTotalAmount = filteredCases.reduce((acc, c) => acc + (c.totalAmount || 0), 0);
@@ -140,11 +151,18 @@ export default function CasesPage() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
             <p className="text-xs text-slate-500">
-              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> cases for <strong className="text-slate-800">{selectedMonth}</strong>
+              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> active cases for <strong className="text-slate-800">{selectedMonth}</strong>
             </p>
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleResetAllCases}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-semibold border border-rose-200 transition"
+              title="Clear all cases"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear All Cases
+            </button>
             <button
               onClick={() => setShowArchived(!showArchived)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
@@ -152,7 +170,7 @@ export default function CasesPage() {
               }`}
             >
               <Archive className="w-3.5 h-3.5" />
-              {showArchived ? 'Active Cases' : 'Archived Cases'}
+              {showArchived ? 'Active Cases' : 'Archived'}
             </button>
             <button
               onClick={handleAddNewCase}
@@ -214,121 +232,149 @@ export default function CasesPage() {
         </div>
       </div>
 
-      {/* Spreadsheet Data Grid */}
+      {/* Spreadsheet Data Grid or Clean Empty State */}
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        <div className="flex-1 overflow-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-900 text-white font-semibold sticky top-0 z-10">
-              <tr>
-                <th className="p-2.5 border-r border-slate-800 w-10 text-center">#</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Surgeon</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Anesthesiologist</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
-                <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">For Pool</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">Balance</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-emerald-300">Surgeon (70%/100%)</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-sky-300">Anesth (30%)</th>
-                <th className="p-2.5 text-center w-16">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredCases.slice(0, 150).map((item) => (
-                <tr key={item.id} className="hover:bg-emerald-50/40 transition">
-                  <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500">{item.itemNo}</td>
-                  <td className="p-2 border-r border-slate-200 font-medium text-slate-900">
-                    <input
-                      type="text"
-                      value={item.patientName}
-                      onChange={(e) => handleUpdateRow(item.id, 'patientName', e.target.value)}
-                      className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-200">
-                    <input
-                      type="text"
-                      value={item.surgeon}
-                      onChange={(e) => handleUpdateRow(item.id, 'surgeon', e.target.value)}
-                      className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-200">
-                    <input
-                      type="text"
-                      value={item.anesth}
-                      onChange={(e) => handleUpdateRow(item.id, 'anesth', e.target.value)}
-                      className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-slate-600">
-                    <input
-                      type="text"
-                      value={item.imPediaGp}
-                      onChange={(e) => handleUpdateRow(item.id, 'imPediaGp', e.target.value)}
-                      className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-center">
-                    <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-700">
-                      {item.remarks || '-'}
-                    </span>
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
-                    <input
-                      type="number"
-                      value={item.totalAmount}
-                      onChange={(e) => handleUpdateRow(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
-                      className="w-full text-right bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5 font-bold"
-                    />
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-right text-amber-700 font-medium">
-                    ₱{item.forPool?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-right font-semibold text-slate-800">
-                    ₱{item.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-700">
-                    ₱{item.surgeonShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
-                    ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-2 text-center">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        onClick={() => handleToggleArchive(item.id)}
-                        className="p-1 text-slate-400 hover:text-amber-600"
-                        title={(item as any).isArchived ? 'Restore' : 'Archive'}
-                      >
-                        {(item as any).isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCase(item.id)}
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+        {filteredCases.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
+            <div className="p-4 bg-emerald-50 text-emerald-600 rounded-full">
+              <UploadCloud className="w-8 h-8" />
+            </div>
+            <h3 className="font-bold text-base text-slate-900">Cases Grid is Clean & Ready</h3>
+            <p className="text-xs text-slate-500 max-w-sm">
+              Upload your official PhilHealth ACPN PDF to populate all claims and automatic sharing formulas.
+            </p>
+            <div className="flex gap-2 pt-2">
+              <Link
+                href="/upload"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition"
+              >
+                <UploadCloud className="w-4 h-4" /> Upload ACPN PDF
+              </Link>
+              <button
+                onClick={handleAddNewCase}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition"
+              >
+                + Add Manual Case
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-900 text-white font-semibold sticky top-0 z-10">
+                <tr>
+                  <th className="p-2.5 border-r border-slate-800 w-10 text-center">#</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Surgeon</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Anesthesiologist</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
+                  <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">For Pool</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">Balance</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-emerald-300">Surgeon (70%/100%)</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-sky-300">Anesth (30%)</th>
+                  <th className="p-2.5 text-center w-16">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {filteredCases.slice(0, 150).map((item) => (
+                  <tr key={item.id} className="hover:bg-emerald-50/40 transition">
+                    <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500">{item.itemNo}</td>
+                    <td className="p-2 border-r border-slate-200 font-medium text-slate-900">
+                      <input
+                        type="text"
+                        value={item.patientName}
+                        onChange={(e) => handleUpdateRow(item.id, 'patientName', e.target.value)}
+                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                      />
+                    </td>
+                    <td className="p-2 border-r border-slate-200">
+                      <input
+                        type="text"
+                        value={item.surgeon}
+                        onChange={(e) => handleUpdateRow(item.id, 'surgeon', e.target.value)}
+                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                      />
+                    </td>
+                    <td className="p-2 border-r border-slate-200">
+                      <input
+                        type="text"
+                        value={item.anesth}
+                        onChange={(e) => handleUpdateRow(item.id, 'anesth', e.target.value)}
+                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                      />
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-slate-600">
+                      <input
+                        type="text"
+                        value={item.imPediaGp}
+                        onChange={(e) => handleUpdateRow(item.id, 'imPediaGp', e.target.value)}
+                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                      />
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center">
+                      <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-700">
+                        {item.remarks || '-'}
+                      </span>
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
+                      <input
+                        type="number"
+                        value={item.totalAmount}
+                        onChange={(e) => handleUpdateRow(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
+                        className="w-full text-right bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5 font-bold"
+                      />
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right text-amber-700 font-medium">
+                      ₱{item.forPool?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-semibold text-slate-800">
+                      ₱{item.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-700">
+                      ₱{item.surgeonShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
+                      ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 text-center">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => handleToggleArchive(item.id)}
+                          className="p-1 text-slate-400 hover:text-amber-600"
+                          title={(item as any).isArchived ? 'Restore' : 'Archive'}
+                        >
+                          {(item as any).isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCase(item.id)}
+                          className="p-1 text-slate-400 hover:text-rose-600"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* Footer Summary Row */}
-        <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold">
-          <div>Total Active Cases: {filteredCases.length} ({selectedMonth})</div>
-          <div className="flex gap-6">
-            <span>Gross Total: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-            <span>Pool Retained: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-            <span>Surgeon Share: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-            <span>Anesth Share: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+        {filteredCases.length > 0 && (
+          <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold">
+            <div>Total Active Cases: {filteredCases.length} ({selectedMonth})</div>
+            <div className="flex gap-6">
+              <span>Gross Total: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Pool Retained: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Surgeon Share: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Anesth Share: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
