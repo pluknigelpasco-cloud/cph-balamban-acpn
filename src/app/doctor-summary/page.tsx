@@ -255,7 +255,14 @@ export default function DoctorSummaryPage() {
             </div>
 
             {/* Official LETTERHEAD NEW 2026 Header with Official Logos */}
-            <OfficialLetterhead title="PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER" />
+            <OfficialLetterhead />
+
+            {/* Official Document Sub-Header Placed Below Letterhead Line */}
+            <div className="text-center my-2.5">
+              <h3 className="inline-block text-[12px] font-black uppercase tracking-wider text-slate-900 border-b border-slate-400 pb-0.5">
+                PHILHEALTH PROFESSIONAL FEE (ACPN) COMPENSATION VOUCHER
+              </h3>
+            </div>
 
             {/* Doctor & Period Details */}
             <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-4 rounded-lg border border-slate-200 mb-4">

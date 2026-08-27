@@ -44,14 +44,6 @@ export default function OfficialLetterhead({ title = 'PHILHEALTH PROFESSIONAL FE
           />
         </div>
       </div>
-
-      {title && (
-        <div className="mt-3 text-center">
-          <span className="inline-block bg-slate-900 text-white px-4 py-1 rounded text-xs font-bold uppercase tracking-wider">
-            {title}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
