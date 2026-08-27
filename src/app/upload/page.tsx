@@ -134,8 +134,8 @@ export default function UploadPage() {
     const newBatches: UploadedBatch[] = [];
     const allParsed: ClaimItem[] = [];
 
-    const existingPabns = new Set<string>();
-    uploadedBatches.forEach(b => b.claims.forEach(c => existingPabns.add(c.pabn)));
+    const existingSeries = new Set<string>();
+    uploadedBatches.forEach(b => b.claims.forEach(c => existingSeries.add(c.series)));
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -154,10 +154,10 @@ export default function UploadPage() {
 
         let duplicateClaimCount = 0;
         claims.forEach(c => {
-          if (existingPabns.has(c.pabn)) {
+          if (c.series && existingSeries.has(c.series)) {
             duplicateClaimCount++;
           } else {
-            existingPabns.add(c.pabn);
+            if (c.series) existingSeries.add(c.series);
           }
         });
 
