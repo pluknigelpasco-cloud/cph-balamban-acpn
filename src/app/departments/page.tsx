@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
-import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw, UploadCloud } from 'lucide-react';
+import { Layers, HeartPulse, Stethoscope, Baby, Users2, Activity, Plus, Edit2, Trash2, Archive, RotateCcw, UserCheck, Stethoscope as DocIcon } from 'lucide-react';
 import { computeNicuHours, computePediaImHours } from '@/lib/computationEngine';
-import Link from 'next/link';
+import { CaseItem } from '@/types';
 
 interface HemoEntry {
   id: string;
@@ -15,12 +15,43 @@ interface HemoEntry {
   isArchived?: boolean;
 }
 
+const defaultDoctorRoster = [
+  'MACHACON, KEITH M.',
+  'DELOS SANTOS, JERAMY A.',
+  'JUSON, JEREMIAH JADE T.',
+  'RICO, RICHARD JANUS R.',
+  'ALPAS-DELA PEÑA, APRIL ANN M.',
+  'CASTRO, LEIDENIA I.',
+  'MORALDE, KIERSTIENNE KAREN D.',
+  'TACALDO, RICKY JOY B.',
+  'ARDIENTE, KIRRBY S.',
+  'EGONIA, HUBERT F.',
+  'LASDOCE, KAZELINE L.',
+  'TORRALBA, NOVA CARL V.',
+  'SEETO, LANIE RAE Y.',
+  'VERANO- DUMDUM, RUSIENNE MAE A.',
+  'ESTALANI, CORA M.',
+  'TAWASIL, ABU-KHAYRE O.',
+  'KHO, SHERYL P.',
+  'DANDAN, OLIVIA A.',
+  'PEÑARANDA, CHARLENE LUZ L.',
+  'BAJA, CLARICE P.',
+  'PAD-AY, MELANIE B.',
+  'ROSELL, KURT PETER',
+  'LANORIAS, DENNIS JR C.',
+  'LIBERATO, JAN FREDERICK T.',
+  'ABAYON, MARCELLE MAE L.'
+];
+
 export default function DepartmentsPage() {
   const { selectedMonth } = usePeriod();
   const [activeTab, setActiveTab] = useState<'hemo' | 'nicu' | 'pedia-im' | 'btl' | 'pm'>('hemo');
   const [showArchived, setShowArchived] = useState(false);
 
-  // HEMO state with localStorage persistence
+  // Dynamic doctor list combined from master roster + cases in localStorage
+  const [doctorList, setDoctorList] = useState<string[]>(defaultDoctorRoster);
+
+  // HEMO state
   const [hemoEntries, setHemoEntries] = useState<HemoEntry[]>([]);
   const [totalHemoShare, setTotalHemoShare] = useState(0);
 
@@ -39,8 +70,24 @@ export default function DepartmentsPage() {
   // PM state
   const [pmCases, setPmCases] = useState<any[]>([]);
 
-  // Load from localStorage
+  // Load from localStorage & extract all active doctors
   useEffect(() => {
+    const savedCasesStr = localStorage.getItem('cph_cases_data');
+    if (savedCasesStr) {
+      try {
+        const parsedCases: CaseItem[] = JSON.parse(savedCasesStr);
+        const docsSet = new Set<string>(defaultDoctorRoster);
+        parsedCases.forEach(c => {
+          if (c.surgeon && c.surgeon.trim().length > 3) docsSet.add(c.surgeon.trim());
+          if (c.anesth && c.anesth.trim().length > 3) docsSet.add(c.anesth.trim());
+          if (c.imPediaGp) {
+            c.imPediaGp.split(/[/;,]/).forEach(d => d.trim().length > 3 && docsSet.add(d.trim()));
+          }
+        });
+        setDoctorList(Array.from(docsSet).sort());
+      } catch (e) {}
+    }
+
     const savedHemo = localStorage.getItem('cph_dept_hemo');
     if (savedHemo) { try { setHemoEntries(JSON.parse(savedHemo)); } catch (e) {} }
 
@@ -71,33 +118,33 @@ export default function DepartmentsPage() {
   // Add / Edit modals state
   const [isAddingHemo, setIsAddingHemo] = useState(false);
   const [editingHemo, setEditingHemo] = useState<HemoEntry | null>(null);
-  const [hemoFormDoc, setHemoFormDoc] = useState('');
+  const [hemoFormDoc, setHemoFormDoc] = useState(defaultDoctorRoster[7]); // TACALDO
   const [hemoFormMins, setHemoFormMins] = useState(600);
   const [hemoFormMult, setHemoFormMult] = useState(1.0);
 
   const [isAddingNicu, setIsAddingNicu] = useState(false);
-  const [nicuFormName, setNicuFormName] = useState('');
+  const [nicuFormName, setNicuFormName] = useState(defaultDoctorRoster[5]); // CASTRO
   const [nicuFormRole, setNicuFormRole] = useState('pedia');
   const [nicuFormStatus, setNicuFormStatus] = useState('jo');
   const [nicuFormHours, setNicuFormHours] = useState(180);
 
   const [isAddingPedia, setIsAddingPedia] = useState(false);
-  const [pediaFormName, setPediaFormName] = useState('');
+  const [pediaFormName, setPediaFormName] = useState(defaultDoctorRoster[5]); // CASTRO
   const [pediaFormHours, setPediaFormHours] = useState(150);
 
   const [isAddingBtl, setIsAddingBtl] = useState(false);
-  const [btlFormDoc, setBtlFormDoc] = useState('');
+  const [btlFormDoc, setBtlFormDoc] = useState(defaultDoctorRoster[16]); // KHO
   const [btlFormAmount, setBtlFormAmount] = useState(5000);
 
   const [isAddingPm, setIsAddingPm] = useState(false);
   const [pmFormPatient, setPmFormPatient] = useState('');
-  const [pmFormSurgeon, setPmFormSurgeon] = useState('Ardiente');
-  const [pmFormAnesth, setPmFormAnesth] = useState('Moralde');
+  const [pmFormSurgeon, setPmFormSurgeon] = useState(defaultDoctorRoster[8]); // ARDIENTE
+  const [pmFormAnesth, setPmFormAnesth] = useState(defaultDoctorRoster[6]); // MORALDE
   const [pmFormAmount, setPmFormAmount] = useState(16380);
 
   // HEMO CRUD
   const handleSaveHemo = () => {
-    if (!hemoFormDoc) return alert('Please enter Doctor Name');
+    if (!hemoFormDoc) return alert('Please select a Doctor');
     let updated: HemoEntry[] = [];
     if (editingHemo) {
       updated = hemoEntries.map(h => h.id === editingHemo.id ? { ...h, doctor: hemoFormDoc, minutes: hemoFormMins, multiplier: hemoFormMult } : h);
@@ -115,7 +162,6 @@ export default function DepartmentsPage() {
     }
     setHemoEntries(updated);
     localStorage.setItem('cph_dept_hemo', JSON.stringify(updated));
-    setHemoFormDoc('');
   };
 
   const handleToggleArchiveHemo = (id: string) => {
@@ -137,7 +183,7 @@ export default function DepartmentsPage() {
   const computedNicu = computeNicuHours(totalNicuCasesAmount, nicuSpecialistRate, activeNicuList);
 
   const handleSaveNicu = () => {
-    if (!nicuFormName) return alert('Enter Doctor Name');
+    if (!nicuFormName) return alert('Select Doctor Name');
     const updated = [...nicuDocs, {
       id: `nicu-${Date.now()}`,
       name: nicuFormName,
@@ -151,7 +197,6 @@ export default function DepartmentsPage() {
     setNicuDocs(updated);
     localStorage.setItem('cph_dept_nicu', JSON.stringify(updated));
     setIsAddingNicu(false);
-    setNicuFormName('');
   };
 
   // Pedia CRUD
@@ -159,7 +204,7 @@ export default function DepartmentsPage() {
   const computedPedia = computePediaImHours(totalPediaPool, activePediaList);
 
   const handleSavePedia = () => {
-    if (!pediaFormName) return alert('Enter Doctor Name');
+    if (!pediaFormName) return alert('Select Doctor Name');
     const updated = [...pediaDocs, {
       id: `ped-${Date.now()}`,
       name: pediaFormName,
@@ -173,13 +218,12 @@ export default function DepartmentsPage() {
     setPediaDocs(updated);
     localStorage.setItem('cph_dept_pedia', JSON.stringify(updated));
     setIsAddingPedia(false);
-    setPediaFormName('');
   };
 
   // BTL CRUD
   const activeBtlList = btlList.filter(d => (showArchived ? d.isArchived : !d.isArchived) && (selectedMonth === 'ALL' || d.month === selectedMonth));
   const handleSaveBtl = () => {
-    if (!btlFormDoc) return alert('Enter Doctor Name');
+    if (!btlFormDoc) return alert('Select Doctor Name');
     const updated = [...btlList, {
       id: `btl-${Date.now()}`,
       doctor: btlFormDoc,
@@ -191,7 +235,6 @@ export default function DepartmentsPage() {
     setBtlList(updated);
     localStorage.setItem('cph_dept_btl', JSON.stringify(updated));
     setIsAddingBtl(false);
-    setBtlFormDoc('');
   };
 
   // PM CRUD
@@ -227,11 +270,11 @@ export default function DepartmentsPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               PERIOD: {selectedMonth}
             </span>
-            <span className="text-xs text-slate-500">Live Formula Recalculations & Entry Management</span>
+            <span className="text-xs text-slate-500">Doctor Dropdown Selectors & Formula Recalculations</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">Department Sharing Center</h1>
           <p className="text-sm text-slate-500">
-            Create, edit, delete, and archive doctor entries across specialized hospital departments.
+            Select doctors from the accredited roster dropdown, enter minutes/hours, and manage departmental sharing.
           </p>
         </div>
 
@@ -304,14 +347,12 @@ export default function DepartmentsPage() {
               <h2 className="text-lg font-bold text-slate-900">Hemodialysis (HEMO) Attending Rate Matrix</h2>
               <p className="text-xs text-slate-500">Formula: Rate per minute = Total HEMO-IM Share / Total Calculated Minutes</p>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(''); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-              >
-                <Plus className="w-4 h-4" /> Add HEMO Doctor Entry
-              </button>
-            </div>
+            <button
+              onClick={() => { setIsAddingHemo(true); setEditingHemo(null); setHemoFormDoc(doctorList[0]); }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+            >
+              <Plus className="w-4 h-4" /> Add HEMO Doctor Entry
+            </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -322,7 +363,7 @@ export default function DepartmentsPage() {
                 value={totalHemoShare}
                 onChange={(e) => setTotalHemoShare(parseFloat(e.target.value) || 0)}
                 className="block w-full font-bold text-base bg-transparent border-b border-slate-300 focus:outline-none mt-1"
-                placeholder="Enter HEMO Pool (e.g. 82493.46)"
+                placeholder="0.00"
               />
             </div>
             <div className="bg-sky-50 p-3 rounded-lg border border-sky-200">
@@ -337,7 +378,7 @@ export default function DepartmentsPage() {
 
           {activeHemoList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No HEMO doctor entries yet for {selectedMonth}. Click "+ Add HEMO Doctor Entry" to add doctors and minutes.
+              No HEMO doctor entries yet for {selectedMonth}. Click "+ Add HEMO Doctor Entry" to select doctors from dropdown.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -402,20 +443,23 @@ export default function DepartmentsPage() {
             </table>
           )}
 
+          {/* Modal with Doctor Dropdown */}
           {isAddingHemo && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-                <h3 className="font-bold text-sm text-slate-900">{editingHemo ? 'Edit HEMO Entry' : 'Add HEMO Doctor Entry'}</h3>
+              <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
+                <h3 className="font-bold text-sm text-slate-900">{editingHemo ? 'Edit HEMO Doctor Entry' : 'Add HEMO Doctor Entry'}</h3>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Doctor Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Dr. Tawasil"
+                    <label className="block font-semibold text-slate-700 mb-1">Select Doctor</label>
+                    <select
                       value={hemoFormDoc}
                       onChange={(e) => setHemoFormDoc(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Logged Minutes</label>
@@ -423,7 +467,7 @@ export default function DepartmentsPage() {
                       type="number"
                       value={hemoFormMins}
                       onChange={(e) => setHemoFormMins(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                   <div>
@@ -431,7 +475,7 @@ export default function DepartmentsPage() {
                     <select
                       value={hemoFormMult}
                       onChange={(e) => setHemoFormMult(parseFloat(e.target.value))}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-semibold"
                     >
                       <option value={1.0}>100% (1.0) - Regular Duty Shift</option>
                       <option value={0.25}>25% (0.25) - Clinical Supervision</option>
@@ -448,7 +492,7 @@ export default function DepartmentsPage() {
                   </button>
                   <button
                     onClick={handleSaveHemo}
-                    className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg"
+                    className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow"
                   >
                     Save Entry
                   </button>
@@ -506,7 +550,7 @@ export default function DepartmentsPage() {
 
           {activeNicuList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No NICU doctor entries yet for {selectedMonth}. Click "+ Add NICU Entry" to add doctor duty hours.
+              No NICU doctor entries yet for {selectedMonth}. Click "+ Add NICU Entry" to select doctors from dropdown.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -553,18 +597,20 @@ export default function DepartmentsPage() {
 
           {isAddingNicu && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
+              <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add NICU Doctor Duty Hours</h3>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Doctor Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Dr. Castro, Leidenia I."
+                    <label className="block font-semibold text-slate-700 mb-1">Select Doctor</label>
+                    <select
                       value={nicuFormName}
                       onChange={(e) => setNicuFormName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Duty Hours</label>
@@ -572,13 +618,13 @@ export default function DepartmentsPage() {
                       type="number"
                       value={nicuFormHours}
                       onChange={(e) => setNicuFormHours(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button onClick={() => setIsAddingNicu(false)} className="px-3 py-1.5 bg-slate-100 text-xs font-semibold rounded-lg">Cancel</button>
-                  <button onClick={handleSaveNicu} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Save Entry</button>
+                  <button onClick={handleSaveNicu} className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow">Save Entry</button>
                 </div>
               </div>
             </div>
@@ -615,7 +661,7 @@ export default function DepartmentsPage() {
 
           {activePediaList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No Pedia/IM doctor entries yet for {selectedMonth}. Click "+ Add Pedia Entry" to add doctors.
+              No Pedia/IM doctor entries yet for {selectedMonth}. Click "+ Add Pedia Entry" to select doctors.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -659,17 +705,20 @@ export default function DepartmentsPage() {
 
           {isAddingPedia && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
-                <h3 className="font-bold text-sm text-slate-900">Add Pedia Doctor Entry</h3>
+              <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
+                <h3 className="font-bold text-sm text-slate-900">Add Pedia / IM Doctor Entry</h3>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Doctor Name</label>
-                    <input
-                      type="text"
+                    <label className="block font-semibold text-slate-700 mb-1">Select Doctor</label>
+                    <select
                       value={pediaFormName}
                       onChange={(e) => setPediaFormName(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Hours</label>
@@ -677,13 +726,13 @@ export default function DepartmentsPage() {
                       type="number"
                       value={pediaFormHours}
                       onChange={(e) => setPediaFormHours(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button onClick={() => setIsAddingPedia(false)} className="px-3 py-1.5 bg-slate-100 text-xs rounded-lg">Cancel</button>
-                  <button onClick={handleSavePedia} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Save</button>
+                  <button onClick={handleSavePedia} className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow">Save</button>
                 </div>
               </div>
             </div>
@@ -709,7 +758,7 @@ export default function DepartmentsPage() {
 
           {activeBtlList.length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-lg">
-              No FP team doctor entries yet for {selectedMonth}. Click "+ Add FP Doctor" to add.
+              No FP team doctor entries yet for {selectedMonth}. Click "+ Add FP Doctor" to select from dropdown.
             </div>
           ) : (
             <table className="w-full text-left text-xs border border-slate-200 rounded-lg overflow-hidden">
@@ -747,17 +796,20 @@ export default function DepartmentsPage() {
 
           {isAddingBtl && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
+              <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add BTL Team Doctor</h3>
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Doctor Name</label>
-                    <input
-                      type="text"
+                    <label className="block font-semibold text-slate-700 mb-1">Select Doctor</label>
+                    <select
                       value={btlFormDoc}
                       onChange={(e) => setBtlFormDoc(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">BTL Amount</label>
@@ -765,13 +817,13 @@ export default function DepartmentsPage() {
                       type="number"
                       value={btlFormAmount}
                       onChange={(e) => setBtlFormAmount(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button onClick={() => setIsAddingBtl(false)} className="px-3 py-1.5 bg-slate-100 text-xs rounded-lg">Cancel</button>
-                  <button onClick={handleSaveBtl} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Save</button>
+                  <button onClick={handleSaveBtl} className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow">Save</button>
                 </div>
               </div>
             </div>
@@ -843,35 +895,42 @@ export default function DepartmentsPage() {
 
           {isAddingPm && (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl max-w-sm w-full p-5 space-y-4 shadow-xl border border-slate-200">
+              <div className="bg-white rounded-xl max-w-md w-full p-5 space-y-4 shadow-xl border border-slate-200">
                 <h3 className="font-bold text-sm text-slate-900">Add Pain Management Case</h3>
                 <div className="space-y-3 text-xs">
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Patient Name</label>
                     <input
                       type="text"
+                      placeholder="Enter patient full name"
                       value={pmFormPatient}
                       onChange={(e) => setPmFormPatient(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Surgeon</label>
-                    <input
-                      type="text"
+                    <label className="block font-semibold text-slate-700 mb-1">Select Surgeon</label>
+                    <select
                       value={pmFormSurgeon}
                       onChange={(e) => setPmFormSurgeon(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Anesthesiologist</label>
-                    <input
-                      type="text"
+                    <label className="block font-semibold text-slate-700 mb-1">Select Anesthesiologist</label>
+                    <select
                       value={pmFormAnesth}
                       onChange={(e) => setPmFormAnesth(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
-                    />
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-900"
+                    >
+                      {doctorList.map(doc => (
+                        <option key={doc} value={doc}>{doc}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block font-semibold text-slate-700 mb-1">Total Amount</label>
@@ -879,13 +938,13 @@ export default function DepartmentsPage() {
                       type="number"
                       value={pmFormAmount}
                       onChange={(e) => setPmFormAmount(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
                     />
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
                   <button onClick={() => setIsAddingPm(false)} className="px-3 py-1.5 bg-slate-100 text-xs rounded-lg">Cancel</button>
-                  <button onClick={handleSavePm} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Save PM Case</button>
+                  <button onClick={handleSavePm} className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shadow">Save PM Case</button>
                 </div>
               </div>
             </div>
