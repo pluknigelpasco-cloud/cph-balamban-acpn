@@ -7,7 +7,7 @@ import { CaseItem } from '@/types';
 import { recalculateCase } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
 import { OFFICIAL_DOCTORS_ROSTER, sanitizeDoctorName } from '@/lib/acpnParser';
-import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CasesPage() {
@@ -25,7 +25,7 @@ export default function CasesPage() {
     if (saved) {
       try {
         const rawCases: CaseItem[] = JSON.parse(saved);
-        const sanitized = rawCases.map(c => ({
+        const sanitized = rawCases.map(c => recalculateCase({
           ...c,
           surgeon: sanitizeDoctorName(c.surgeon || ''),
           anesth: sanitizeDoctorName(c.anesth || ''),
@@ -49,19 +49,20 @@ export default function CasesPage() {
   const doctorOptions = useMemo(() => {
     const set = new Set<string>(OFFICIAL_DOCTORS_ROSTER);
     cases.forEach(c => {
-      if (c.surgeon && c.surgeon.length > 3 && !/Page|d+/i.test(c.surgeon)) set.add(c.surgeon);
-      if (c.anesth && c.anesth.length > 3 && !/Page|d+/i.test(c.anesth)) set.add(c.anesth);
-      if (c.imPediaGp && c.imPediaGp.length > 3 && !/Page|d+/i.test(c.imPediaGp)) set.add(c.imPediaGp);
+      if (c.surgeon && c.surgeon.length > 3 && !/Page|\d+/i.test(c.surgeon)) set.add(c.surgeon);
+      if (c.anesth && c.anesth.length > 3 && !/Page|\d+/i.test(c.anesth)) set.add(c.anesth);
+      if (c.imPediaGp && c.imPediaGp.length > 3 && !/Page|\d+/i.test(c.imPediaGp)) set.add(c.imPediaGp);
     });
     return Array.from(set).sort();
   }, [cases]);
 
+  // Distinct Remarks list (e.g. ALL, Hemo, C/S, 1D, 49080, FP, Dental)
   const remarkOptions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(['Hemo', 'C/S', '1D', '49080', 'FP', 'OR Case', 'Dental']);
     cases.forEach(c => {
       if (c.remarks) set.add(c.remarks.trim());
     });
-    return Array.from(set).sort();
+    return Array.from(set).filter(Boolean).sort();
   }, [cases]);
 
   const filteredCases = useMemo(() => {
@@ -74,6 +75,7 @@ export default function CasesPage() {
         searchTerm === '' ||
         (c.patientName && c.patientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.itemNo && c.itemNo.includes(searchTerm)) ||
+        (c.remarks && c.remarks.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.surgeon && c.surgeon.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.anesth && c.anesth.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -85,7 +87,7 @@ export default function CasesPage() {
 
       const matchesRemark =
         selectedRemark === 'ALL' ||
-        c.remarks === selectedRemark;
+        c.remarks?.toLowerCase() === selectedRemark.toLowerCase();
 
       return matchesMonth && matchesArchive && matchesDoctorRole && matchesSearch && matchesDoctor && matchesRemark;
     });
@@ -136,18 +138,19 @@ export default function CasesPage() {
     }
   };
 
-  const handleAddNewCase = () => {
+  const handleAddNewCase = (customRemark = '1D') => {
+    const isHemoCase = customRemark.toLowerCase() === 'hemo';
     const newCase = recalculateCase({
       id: `case-${Date.now()}`,
       itemNo: (cases.length + 1).toString(),
-      patientName: 'NEW PATIENT',
-      surgeon: OFFICIAL_DOCTORS_ROSTER[0],
+      patientName: isHemoCase ? 'HEMO PATIENT' : 'NEW PATIENT',
+      surgeon: isHemoCase ? 'Indo' : OFFICIAL_DOCTORS_ROSTER[0],
       anesth: '',
-      imPediaGp: '',
-      remarks: '1D',
-      totalAmount: 10000,
+      imPediaGp: isHemoCase ? 'Delos Santos/Tawasil' : '',
+      remarks: customRemark,
+      totalAmount: isHemoCase ? 1750 : 10000,
     });
-    const updated = [{ ...newCase, month: selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth, isArchived: false } as any, ...cases];
+    const updated = [{ ...newCase, month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth, isArchived: false } as any, ...cases];
     updateAndPersist(updated);
   };
 
@@ -155,6 +158,8 @@ export default function CasesPage() {
   const sumForPool = filteredCases.reduce((acc, c) => acc + (c.forPool || 0), 0);
   const sumSurgeonShare = filteredCases.reduce((acc, c) => acc + (c.surgeonShare || 0), 0);
   const sumAnesthShare = filteredCases.reduce((acc, c) => acc + (c.anesthShare || 0), 0);
+  const sumHemoShare = filteredCases.reduce((acc, c) => acc + (c.hemo || 0), 0);
+  const sumHemoImShare = filteredCases.reduce((acc, c) => acc + (c.hemoIm || 0), 0);
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden p-6 space-y-4">
@@ -174,7 +179,7 @@ export default function CasesPage() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
             <p className="text-xs text-slate-500">
-              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> active claims for <strong className="text-slate-800">{selectedMonth}</strong>
+              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> claims for <strong className="text-slate-800">{selectedMonth}</strong> with live Hemo & Surgeon distributions.
             </p>
           </div>
 
@@ -198,10 +203,16 @@ export default function CasesPage() {
               {showArchived ? 'Active Cases' : 'Archived'}
             </button>
             <button
-              onClick={handleAddNewCase}
+              onClick={() => handleAddNewCase('Hemo')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
+            >
+              <Activity className="w-4 h-4" /> + Add Hemo Case
+            </button>
+            <button
+              onClick={() => handleAddNewCase('1D')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
             >
-              <Plus className="w-4 h-4" /> Add Case
+              <Plus className="w-4 h-4" /> + Add OR Case
             </button>
             <button
               onClick={() => exportCasesToExcel(filteredCases, `CPH_Balamban_Cases_${selectedMonth}.xlsx`)}
@@ -212,17 +223,34 @@ export default function CasesPage() {
           </div>
         </div>
 
-        {/* Filter Bar */}
+        {/* Filter Bar with Remark / Hemo Dropdown */}
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-2 pt-2 border-t border-slate-100">
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search patient, doctor, #..."
+              placeholder="Search patient, doctor, hemo, #..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
             />
+          </div>
+
+          <div>
+            <select
+              value={selectedRemark}
+              onChange={(e) => setSelectedRemark(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500 font-semibold text-slate-800"
+            >
+              <option value="ALL">🔍 All Case Types / Remarks ({remarkOptions.length})</option>
+              <option value="Hemo">🫘 Hemodialysis (Hemo)</option>
+              <option value="C/S">👶 Cesarean (C/S)</option>
+              <option value="OR Case">🩺 Major OR Cases</option>
+              <option value="FP">👥 Family Planning (FP)</option>
+              <option value="1D">📋 1D Cases</option>
+              <option value="49080">💊 49080 (35% Pool)</option>
+              <option value="Dental">🦷 Dental</option>
+            </select>
           </div>
 
           <div>
@@ -238,26 +266,13 @@ export default function CasesPage() {
             </select>
           </div>
 
-          <div>
-            <select
-              value={selectedRemark}
-              onChange={(e) => setSelectedRemark(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
-            >
-              <option value="ALL">All Remarks / Types ({remarkOptions.length})</option>
-              {remarkOptions.map((rem) => (
-                <option key={rem} value={rem}>{rem}</option>
-              ))}
-            </select>
-          </div>
-
           <div className="flex items-center justify-end text-xs text-slate-500 font-medium">
             Filtered Total: <span className="font-bold text-slate-900 ml-1">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
 
-      {/* Spreadsheet Data Grid */}
+      {/* Spreadsheet Data Grid with HEMO & HEMO-IM Exact Columns */}
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         {filteredCases.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
@@ -266,7 +281,7 @@ export default function CasesPage() {
             </div>
             <h3 className="font-bold text-base text-slate-900">Cases Grid is Clean & Ready for {selectedMonth}</h3>
             <p className="text-xs text-slate-500 max-w-sm">
-              Upload your official PhilHealth ACPN PDF to populate all claims and automatic sharing formulas for {selectedMonth}.
+              Upload your official PhilHealth ACPN PDF or click "+ Add Hemo Case" to populate cases.
             </p>
             <div className="flex gap-2 pt-2">
               <Link
@@ -276,10 +291,10 @@ export default function CasesPage() {
                 <UploadCloud className="w-4 h-4" /> Upload {selectedMonth} ACPN PDF
               </Link>
               <button
-                onClick={handleAddNewCase}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition"
+                onClick={() => handleAddNewCase('Hemo')}
+                className="px-4 py-2 bg-sky-100 hover:bg-sky-200 text-sky-800 rounded-lg text-xs font-semibold transition"
               >
-                + Add Manual Case
+                + Add Hemo Case
               </button>
             </div>
           </div>
@@ -289,24 +304,28 @@ export default function CasesPage() {
               <thead className="bg-slate-900 text-white font-semibold sticky top-0 z-10">
                 <tr>
                   <th className="p-2.5 border-r border-slate-800 w-12 text-center">#</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[150px]">Surgeon / Attending</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[150px]">Anesthesiologist</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
-                  <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
-                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
-                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">For Pool</th>
-                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">Balance</th>
-                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-emerald-300">Surgeon (70%/100%)</th>
-                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-sky-300">Anesth (30%)</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[170px]">NAME OF PATIENT</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">SURGEON</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">ANESTH</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[140px]">IM / PEDIA / GP</th>
+                  <th className="p-2.5 border-r border-slate-800 w-24 text-center">REMARK</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">TOTAL AMOUNT</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">FOR POOL</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">BALANCE</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-emerald-300">SURGEON (100%/70%)</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-sky-300">ANESTH (30%)</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] text-purple-300 bg-purple-950/40">HEMO (57.14%)</th>
+                  <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] text-indigo-300 bg-indigo-950/40">HEMO-IM (27.86%)</th>
                   <th className="p-2.5 text-center w-16">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {paginatedCases.map((item, idx) => {
                   const globalRowIndex = (currentPage - 1) * pageSize + idx + 1;
+                  const isHemoRow = (item.remarks || '').toLowerCase().includes('hemo');
+
                   return (
-                    <tr key={item.id} className="hover:bg-emerald-50/40 transition">
+                    <tr key={item.id} className={`transition ${isHemoRow ? 'bg-purple-50/30 hover:bg-purple-50/60' : 'hover:bg-emerald-50/40'}`}>
                       <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500 font-bold bg-slate-50">
                         {globalRowIndex}
                       </td>
@@ -343,9 +362,24 @@ export default function CasesPage() {
                         />
                       </td>
                       <td className="p-2 border-r border-slate-200 text-center">
-                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-700">
-                          {item.remarks || '-'}
-                        </span>
+                        <select
+                          value={item.remarks || '1D'}
+                          onChange={(e) => handleUpdateRow(item.id, 'remarks', e.target.value)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer border ${
+                            isHemoRow ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                            item.remarks === 'C/S' ? 'bg-sky-100 text-sky-800 border-sky-300' :
+                            item.remarks === '49080' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                            'bg-slate-100 text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          <option value="Hemo">Hemo</option>
+                          <option value="1D">1D</option>
+                          <option value="C/S">C/S</option>
+                          <option value="OR Case">OR Case</option>
+                          <option value="49080">49080</option>
+                          <option value="FP">FP</option>
+                          <option value="Dental">Dental</option>
+                        </select>
                       </td>
                       <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
                         <input
@@ -362,10 +396,16 @@ export default function CasesPage() {
                         ₱{item.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-700">
-                        ₱{item.surgeonShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {item.surgeonShare ? `₱${item.surgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
                       </td>
                       <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
-                        ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {item.anesthShare ? `₱${item.anesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-bold text-purple-700 bg-purple-50/40">
+                        {item.hemo ? `₱${item.hemo.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-bold text-indigo-700 bg-indigo-50/40">
+                        {item.hemoIm ? `₱${item.hemoIm.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '-'}
                       </td>
                       <td className="p-2 text-center">
                         <div className="inline-flex items-center gap-1">
@@ -393,7 +433,7 @@ export default function CasesPage() {
           </div>
         )}
 
-        {/* Footer Summary Row & Pagination */}
+        {/* Footer Summary Row with Hemo Splits */}
         {filteredCases.length > 0 && (
           <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
             <div className="flex items-center gap-4">
@@ -420,11 +460,17 @@ export default function CasesPage() {
               </div>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <span>Gross: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
               <span>Pool: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
               <span>Surgeons: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
               <span>Anesth: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              {sumHemoShare > 0 && (
+                <span>HEMO (57.14%): <span className="text-purple-400">₱{sumHemoShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              )}
+              {sumHemoImShare > 0 && (
+                <span>HEMO-IM (27.86%): <span className="text-indigo-400">₱{sumHemoImShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              )}
             </div>
           </div>
         )}

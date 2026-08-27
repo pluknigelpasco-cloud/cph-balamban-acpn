@@ -96,10 +96,19 @@ export default function UploadPage() {
         }
       }
 
+      // Detect Remark / Type
       let remark = '1D';
-      if (c.pf >= 20000) remark = 'C/S';
-      else if (c.pf >= 10000) remark = 'OR Case';
-      else if (surgeon.toLowerCase().includes('estalani')) remark = 'Dental';
+      const docStr = (c.doctors || []).join(' ').toLowerCase();
+
+      if (docStr.includes('tacaldo') || docStr.includes('seeto') || docStr.includes('tawasil') || [350, 700, 1050, 1400, 1750, 2100].includes(c.pf)) {
+        remark = 'Hemo';
+      } else if (c.pf >= 20000) {
+        remark = 'C/S';
+      } else if (c.pf >= 10000) {
+        remark = 'OR Case';
+      } else if (surgeon.toLowerCase().includes('estalani')) {
+        remark = 'Dental';
+      }
 
       const calculated = recalculateCase({
         id: `case-${Date.now()}-${idx}`,
@@ -193,7 +202,6 @@ export default function UploadPage() {
       localStorage.setItem('cph_acpn_batches', JSON.stringify(updated));
       setCurrentParsedClaims(allParsed);
       setSuccessMessage(`Successfully parsed ${allParsed.length} claims from ${newBatches.length} PDF file(s) for ${targetMonth}!`);
-      // Auto import into Cases
       importClaimsToCases(allParsed, targetMonth);
     }
 
@@ -217,15 +225,12 @@ export default function UploadPage() {
     }
   };
 
-  // Strictly Month-Specific Clear
   const handleClearMonthUploads = () => {
     if (confirm(`Are you sure you want to clear all uploaded ACPN batches and cases for ${targetMonth} ONLY?\n(Data from other months will remain untouched.)`)) {
-      // 1. Filter out only this month's batches
       const remainingBatches = uploadedBatches.filter(b => b.month !== targetMonth);
       setUploadedBatches(remainingBatches);
       localStorage.setItem('cph_acpn_batches', JSON.stringify(remainingBatches));
 
-      // 2. Filter out only this month's cases
       const savedCasesStr = localStorage.getItem('cph_cases_data');
       if (savedCasesStr) {
         try {
@@ -245,7 +250,6 @@ export default function UploadPage() {
   const totalPf = currentParsedClaims.reduce((acc, c) => acc + (c.pf || 0), 0);
   const totalGross = currentParsedClaims.reduce((acc, c) => acc + (c.totalGross || 0), 0);
 
-  // Month-filtered batches list
   const monthBatches = uploadedBatches.filter(b => b.month === targetMonth);
 
   return (
@@ -257,7 +261,7 @@ export default function UploadPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">Month-Specific Management</span>
+            <span className="text-xs text-slate-500">Auto-Detects Hemo, Surgeries & Doctor Splits</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
@@ -309,7 +313,7 @@ export default function UploadPage() {
           {isLoading ? loadingStatus : `Drag & drop single or multiple ACPN PDFs for ${targetMonth}`}
         </h3>
         <p className="text-xs text-slate-500 mt-1 max-w-md">
-          Upload fresh ACPN files for <span className="font-bold text-slate-800">{targetMonth}</span>. All claims and doctor shares are computed specifically for this period.
+          Upload fresh ACPN files for <span className="font-bold text-slate-800">{targetMonth}</span>. All claims, Hemo splits, and doctor shares are computed specifically for this period.
         </p>
 
         <label className="mt-4 cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
@@ -344,7 +348,7 @@ export default function UploadPage() {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
                 <p className="text-sm font-bold text-emerald-900">{successMessage}</p>
-                <p className="text-xs text-emerald-700">✓ All claims, doctor shares, and withholding taxes synced!</p>
+                <p className="text-xs text-emerald-700">✓ All claims, Hemo splits, doctor shares, and withholding taxes synced!</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -384,7 +388,7 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* Uploaded History (Filtered by Target Month or All) */}
+      {/* Uploaded History */}
       {uploadedBatches.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
