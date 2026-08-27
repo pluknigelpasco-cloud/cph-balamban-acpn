@@ -196,25 +196,6 @@ export default function LoginPage() {
               Sign In to Dashboard
             </button>
           </form>
-
-          {/* Quick 1-Click Demo Logins */}
-          <div className="pt-3 border-t border-slate-100">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block text-center mb-2">Quick 1-Click Access</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleQuickLogin('admin')}
-                className="flex-1 py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition"
-              >
-                ⚡ Admin Mode
-              </button>
-              <button
-                onClick={() => handleQuickLogin('doctor', OFFICIAL_DOCTORS_ROSTER[0])}
-                className="flex-1 py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded text-[11px] font-semibold transition"
-              >
-                ⚡ Doctor Mode
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
