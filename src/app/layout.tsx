@@ -6,15 +6,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PeriodProvider, usePeriod } from '@/context/PeriodContext';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck } from 'lucide-react';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog } from 'lucide-react';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user: currentUser, logout } = useAuth();
   const { selectedMonth, setSelectedMonth, monthsList } = usePeriod();
   const [showDocsModal, setShowDocsModal] = useState(false);
 
-  // If login page, render children directly
   if (pathname === '/login') {
     return <>{children}</>;
   }
@@ -121,6 +120,19 @@ function AppShell({ children }: { children: React.ReactNode }) {
             Export & Reports
           </Link>
 
+          <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Administration
+          </div>
+          <Link
+            href="/users"
+            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+              pathname === '/users' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <UserCog className="w-4 h-4 text-rose-400" />
+            User Management
+          </Link>
+
           <div className="pt-4 px-3 py-2">
             <button
               onClick={() => setShowDocsModal(true)}
@@ -132,15 +144,15 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
 
-        {/* User Account / Role & Logout */}
+        {/* User Account & Logout */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white text-xs">
-              {user?.name ? user.name[0] : 'U'}
+              {currentUser?.name ? currentUser.name[0] : 'U'}
             </div>
             <div className="overflow-hidden">
-              <p className="font-bold text-white text-[11px] truncate max-w-[100px]">{user?.name || 'Admin User'}</p>
-              <p className="text-[9px] text-emerald-400 uppercase font-semibold">{user?.role || 'Admin'}</p>
+              <p className="font-bold text-white text-[11px] truncate max-w-[100px]">{currentUser?.name || 'Admin'}</p>
+              <p className="text-[9px] text-emerald-400 uppercase font-semibold">{currentUser?.role || 'Admin'}</p>
             </div>
           </div>
           <button
@@ -153,9 +165,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content Area */}
+      {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
-        {/* Month Banner Header */}
         <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500 font-medium">Viewing Active Month:</span>
@@ -199,9 +210,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5 text-emerald-700">
                   1. For Pool Deduction (Columns J & K)
                 </h3>
-                <p>
-                  Kini ang kantidad nga i-deduct para sa hospital pool fund:
-                </p>
+                <p>Kini ang kantidad nga i-deduct para sa hospital pool fund:</p>
                 <ul className="list-disc pl-5 space-y-1 text-slate-600">
                   <li><strong className="text-slate-800">50% (0.50):</strong> Para sa mga 1D cases, Dental, ug Solo provider cases (<span className="font-mono text-emerald-700">=Total * 0.5</span>).</li>
                   <li><strong className="text-slate-800">35% (0.35):</strong> Para sa code 49080 cases (<span className="font-mono text-emerald-700">=Total * 0.35</span>).</li>
@@ -214,9 +223,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5 text-sky-700">
                   2. Surgeon & Anesthesiologist Sharing (70% / 30%)
                 </h3>
-                <p>
-                  Pagkahuman ma-deduct ang IM/Pedia 10% (kung naa), ang remaining balance i-divide:
-                </p>
+                <p>Pagkahuman ma-deduct ang IM/Pedia 10% (kung naa), ang remaining balance i-divide:</p>
                 <ul className="list-disc pl-5 space-y-1 text-slate-600">
                   <li><strong className="text-slate-800">Surgeon:</strong> 70% kung naay Anesth (<span className="font-mono text-sky-700">=Net * 0.70</span>), o 100% kung solo surgeon (<span className="font-mono text-sky-700">=Net * 1.0</span>).</li>
                   <li><strong className="text-slate-800">Anesthesiologist:</strong> 30% (<span className="font-mono text-sky-700">=Net * 0.30</span>).</li>
