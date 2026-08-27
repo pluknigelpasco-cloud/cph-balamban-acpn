@@ -193,7 +193,7 @@ export default function UploadPage() {
       localStorage.setItem('cph_acpn_batches', JSON.stringify(updated));
       setCurrentParsedClaims(allParsed);
       setSuccessMessage(`Successfully parsed ${allParsed.length} claims from ${newBatches.length} PDF file(s) for ${targetMonth}!`);
-      // Auto import into Cases and Doctor Summary
+      // Auto import into Cases
       importClaimsToCases(allParsed, targetMonth);
     }
 
@@ -217,12 +217,25 @@ export default function UploadPage() {
     }
   };
 
-  const handleClearAllBatchesAndCases = () => {
-    if (confirm('Clear all uploaded batches and reset cases to start 100% fresh?')) {
-      setUploadedBatches([]);
+  // Strictly Month-Specific Clear
+  const handleClearMonthUploads = () => {
+    if (confirm(`Are you sure you want to clear all uploaded ACPN batches and cases for ${targetMonth} ONLY?\n(Data from other months will remain untouched.)`)) {
+      // 1. Filter out only this month's batches
+      const remainingBatches = uploadedBatches.filter(b => b.month !== targetMonth);
+      setUploadedBatches(remainingBatches);
+      localStorage.setItem('cph_acpn_batches', JSON.stringify(remainingBatches));
+
+      // 2. Filter out only this month's cases
+      const savedCasesStr = localStorage.getItem('cph_cases_data');
+      if (savedCasesStr) {
+        try {
+          const allCases: CaseItem[] = JSON.parse(savedCasesStr);
+          const remainingCases = allCases.filter(c => (c as any).month !== targetMonth);
+          localStorage.setItem('cph_cases_data', JSON.stringify(remainingCases));
+        } catch (e) {}
+      }
+
       setCurrentParsedClaims([]);
-      localStorage.removeItem('cph_acpn_batches');
-      localStorage.removeItem('cph_cases_data');
       setSuccessMessage(null);
       setDuplicateWarning(null);
     }
@@ -231,6 +244,9 @@ export default function UploadPage() {
   const totalHci = currentParsedClaims.reduce((acc, c) => acc + (c.hci || 0), 0);
   const totalPf = currentParsedClaims.reduce((acc, c) => acc + (c.pf || 0), 0);
   const totalGross = currentParsedClaims.reduce((acc, c) => acc + (c.totalGross || 0), 0);
+
+  // Month-filtered batches list
+  const monthBatches = uploadedBatches.filter(b => b.month === targetMonth);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -241,21 +257,22 @@ export default function UploadPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">100% Exact Stream Extractor</span>
+            <span className="text-xs text-slate-500">Month-Specific Management</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
-            Upload official monthly ACPN PDFs with automatic doctor name cleaning, 20% withholding tax calculation, and duplicate detection.
+            Upload official monthly ACPN PDFs. Clearing uploads only affects the selected month (<strong className="text-emerald-700">{targetMonth}</strong>).
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {uploadedBatches.length > 0 && (
+          {monthBatches.length > 0 && (
             <button
-              onClick={handleClearAllBatchesAndCases}
+              onClick={handleClearMonthUploads}
               className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold border border-rose-200 transition"
+              title={`Clear only ${targetMonth} data`}
             >
-              <Trash2 className="w-3.5 h-3.5" /> Clear All Uploads
+              <Trash2 className="w-3.5 h-3.5" /> Clear {targetMonth} Uploads ({monthBatches.length})
             </button>
           )}
           <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
@@ -292,7 +309,7 @@ export default function UploadPage() {
           {isLoading ? loadingStatus : `Drag & drop single or multiple ACPN PDFs for ${targetMonth}`}
         </h3>
         <p className="text-xs text-slate-500 mt-1 max-w-md">
-          Upload fresh ACPN files. Exact extraction of all claims, doctor names, and automatic sharing calculations.
+          Upload fresh ACPN files for <span className="font-bold text-slate-800">{targetMonth}</span>. All claims and doctor shares are computed specifically for this period.
         </p>
 
         <label className="mt-4 cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
@@ -367,13 +384,13 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* Uploaded History */}
+      {/* Uploaded History (Filtered by Target Month or All) */}
       {uploadedBatches.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
             <h2 className="font-bold text-slate-800 text-sm flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              Uploaded ACPN Batches ({uploadedBatches.length} files)
+              Uploaded ACPN Batches ({uploadedBatches.length} files total)
             </h2>
           </div>
 
@@ -409,7 +426,7 @@ export default function UploadPage() {
                     <button
                       onClick={() => handleDeleteBatch(b.id)}
                       className="p-1 text-slate-400 hover:text-rose-600"
-                      title="Delete Batch"
+                      title="Delete this batch"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

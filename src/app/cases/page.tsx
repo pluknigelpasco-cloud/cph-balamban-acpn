@@ -118,9 +118,15 @@ export default function CasesPage() {
     }
   };
 
-  const handleResetAllCases = () => {
-    if (confirm('Are you sure you want to CLEAR all cases? This allows you to start fresh.')) {
-      updateAndPersist([]);
+  // Month-Specific Reset Cases
+  const handleResetMonthCases = () => {
+    if (confirm(`Are you sure you want to clear cases for ${selectedMonth} ONLY?\n(Cases in other months will remain untouched.)`)) {
+      if (selectedMonth === 'ALL') {
+        updateAndPersist([]);
+      } else {
+        const remaining = cases.filter(c => (c as any).month !== selectedMonth);
+        updateAndPersist(remaining);
+      }
     }
   };
 
@@ -167,13 +173,15 @@ export default function CasesPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleResetAllCases}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-semibold border border-rose-200 transition"
-              title="Clear all cases"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Clear All Cases
-            </button>
+            {filteredCases.length > 0 && (
+              <button
+                onClick={handleResetMonthCases}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-semibold border border-rose-200 transition"
+                title={`Clear ${selectedMonth} cases`}
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear {selectedMonth} Cases
+              </button>
+            )}
             <button
               onClick={() => setShowArchived(!showArchived)}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
@@ -250,16 +258,16 @@ export default function CasesPage() {
             <div className="p-4 bg-emerald-50 text-emerald-600 rounded-full">
               <UploadCloud className="w-8 h-8" />
             </div>
-            <h3 className="font-bold text-base text-slate-900">Cases Grid is Ready</h3>
+            <h3 className="font-bold text-base text-slate-900">Cases Grid is Clean & Ready for {selectedMonth}</h3>
             <p className="text-xs text-slate-500 max-w-sm">
-              Upload your official PhilHealth ACPN PDF to populate all claims and automatic sharing formulas.
+              Upload your official PhilHealth ACPN PDF to populate all claims and automatic sharing formulas for {selectedMonth}.
             </p>
             <div className="flex gap-2 pt-2">
               <Link
                 href="/upload"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition"
               >
-                <UploadCloud className="w-4 h-4" /> Upload ACPN PDF
+                <UploadCloud className="w-4 h-4" /> Upload {selectedMonth} ACPN PDF
               </Link>
               <button
                 onClick={handleAddNewCase}
