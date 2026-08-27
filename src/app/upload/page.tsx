@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Layers, FileSpreadsheet, Check } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check } from 'lucide-react';
 import { parseAcpnText } from '@/lib/acpnParser';
 import { recalculateCase } from '@/lib/computationEngine';
 import { usePeriod } from '@/context/PeriodContext';
@@ -26,7 +26,7 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
-  const [targetMonth, setTargetMonth] = useState(selectedMonth === 'ALL' ? 'AUGUST 2026' : selectedMonth);
+  const [targetMonth, setTargetMonth] = useState(selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth);
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [currentParsedClaims, setCurrentParsedClaims] = useState<ClaimItem[]>([]);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
@@ -74,8 +74,7 @@ export default function UploadPage() {
     return fullText;
   };
 
-  // Convert Claims to Cases Grid Rows
-  const importClaimsToCases = (claimsToImport: ClaimItem[]) => {
+  const importClaimsToCases = (claimsToImport: ClaimItem[], month: string) => {
     const savedCasesStr = localStorage.getItem('cph_cases_data');
     let existingCases: CaseItem[] = [];
     if (savedCasesStr) {
@@ -97,13 +96,12 @@ export default function UploadPage() {
         }
       }
 
-      // Detect remarks / case type from amounts
       let remark = '1D';
       if (c.pf >= 20000) remark = 'C/S';
       else if (c.pf >= 10000) remark = 'OR Case';
       else if (surgeon.toLowerCase().includes('estalani')) remark = 'Dental';
 
-      return recalculateCase({
+      const calculated = recalculateCase({
         id: `case-${Date.now()}-${idx}`,
         itemNo: (existingCases.length + idx + 1).toString(),
         patientName: c.patientName,
@@ -111,16 +109,19 @@ export default function UploadPage() {
         anesth,
         imPediaGp: imPedia,
         remarks: remark,
-        totalAmount: c.pf || c.totalGross || 5000,
+        totalAmount: c.pf || 5000,
       });
+
+      return {
+        ...calculated,
+        month,
+        isArchived: false
+      } as any;
     });
 
     const combined = [...newCases, ...existingCases];
     localStorage.setItem('cph_cases_data', JSON.stringify(combined));
     setImportedSuccessfully(true);
-    setTimeout(() => {
-      router.push('/cases');
-    }, 1200);
   };
 
   const handleFilesUpload = async (files: FileList | File[]) => {
@@ -140,12 +141,12 @@ export default function UploadPage() {
       const file = files[i];
       if (!file.name.endsWith('.pdf')) continue;
 
-      setLoadingStatus(`Processing ${i + 1} of ${files.length}: ${file.name}...`);
+      setLoadingStatus(`Processing file ${i + 1} of ${files.length}: ${file.name}...`);
 
       try {
         const isFileDuplicate = uploadedBatches.some(b => b.fileName === file.name && b.month === targetMonth);
         if (isFileDuplicate) {
-          setDuplicateWarning(`Warning: "${file.name}" was already uploaded previously for ${targetMonth}.`);
+          setDuplicateWarning(`Notice: "${file.name}" was already uploaded previously for ${targetMonth}.`);
         }
 
         const rawText = await extractTextFromPdf(file);
@@ -191,9 +192,9 @@ export default function UploadPage() {
       setUploadedBatches(updated);
       localStorage.setItem('cph_acpn_batches', JSON.stringify(updated));
       setCurrentParsedClaims(allParsed);
-      setSuccessMessage(`Extracted ${allParsed.length} claims from ${newBatches.length} file(s) for ${targetMonth}!`);
-      // Auto import into Cases
-      importClaimsToCases(allParsed);
+      setSuccessMessage(`Successfully parsed ${allParsed.length} claims from ${newBatches.length} PDF file(s) for ${targetMonth}!`);
+      // Auto import into Cases and Doctor Summary
+      importClaimsToCases(allParsed, targetMonth);
     }
 
     setIsLoading(false);
@@ -216,44 +217,66 @@ export default function UploadPage() {
     }
   };
 
+  const handleClearAllBatchesAndCases = () => {
+    if (confirm('Clear all uploaded batches and reset cases to start 100% fresh?')) {
+      setUploadedBatches([]);
+      setCurrentParsedClaims([]);
+      localStorage.removeItem('cph_acpn_batches');
+      localStorage.removeItem('cph_cases_data');
+      setSuccessMessage(null);
+      setDuplicateWarning(null);
+    }
+  };
+
   const totalHci = currentParsedClaims.reduce((acc, c) => acc + (c.hci || 0), 0);
   const totalPf = currentParsedClaims.reduce((acc, c) => acc + (c.pf || 0), 0);
   const totalGross = currentParsedClaims.reduce((acc, c) => acc + (c.totalGross || 0), 0);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {/* Header */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-              CLEAN DATASET READY
+              BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">Auto-Imports directly to Cases Grid</span>
+            <span className="text-xs text-slate-500">100% Exact Stream Extractor</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
-            Upload your official monthly ACPN PDFs (<span className="font-mono text-emerald-600 font-semibold">CPH.BALAMBAN 8.1.26-PF.pdf</span>) to populate your Cases Grid.
+            Upload official monthly ACPN PDFs with automatic doctor name cleaning, 20% withholding tax calculation, and duplicate detection.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-          <Calendar className="w-4 h-4 text-emerald-600" />
-          <div className="text-xs">
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">Target Month:</span>
-            <select
-              value={targetMonth}
-              onChange={(e) => setTargetMonth(e.target.value)}
-              className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
+        <div className="flex items-center gap-2">
+          {uploadedBatches.length > 0 && (
+            <button
+              onClick={handleClearAllBatchesAndCases}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-lg text-xs font-bold border border-rose-200 transition"
             >
-              <option value="AUGUST 2026">AUGUST 2026</option>
-              <option value="JULY 2026">JULY 2026</option>
-              <option value="JUNE 2026">JUNE 2026</option>
-            </select>
+              <Trash2 className="w-3.5 h-3.5" /> Clear All Uploads
+            </button>
+          )}
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+            <Calendar className="w-4 h-4 text-emerald-600" />
+            <div className="text-xs">
+              <span className="text-slate-500 block text-[10px] uppercase font-bold">Target Month:</span>
+              <select
+                value={targetMonth}
+                onChange={(e) => setTargetMonth(e.target.value)}
+                className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
+              >
+                <option value="JUNE 2026">JUNE 2026</option>
+                <option value="JULY 2026">JULY 2026</option>
+                <option value="AUGUST 2026">AUGUST 2026</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Drag and Drop Zone */}
+      {/* Drag & Drop Bulk Zone */}
       <div
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -266,15 +289,15 @@ export default function UploadPage() {
           {isLoading ? <RefreshCw className="w-8 h-8 animate-spin" /> : <UploadCloud className="w-8 h-8" />}
         </div>
         <h3 className="text-lg font-bold text-slate-900">
-          {isLoading ? loadingStatus : `Drag & drop ACPN PDFs for ${targetMonth}`}
+          {isLoading ? loadingStatus : `Drag & drop single or multiple ACPN PDFs for ${targetMonth}`}
         </h3>
         <p className="text-xs text-slate-500 mt-1 max-w-md">
-          Upload fresh ACPN files. Claims are instantly extracted and populated into your Cases Grid and Doctor Sharing sheets.
+          Upload fresh ACPN files. Exact extraction of all claims, doctor names, and automatic sharing calculations.
         </p>
 
         <label className="mt-4 cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
           <UploadCloud className="w-4 h-4" />
-          Browse PDF File
+          Browse Multiple PDFs
           <input
             type="file"
             accept=".pdf"
@@ -290,13 +313,13 @@ export default function UploadPage() {
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
           <div className="text-xs">
-            <p className="font-bold text-amber-900">Duplicate Check Notice</p>
+            <p className="font-bold text-amber-900">Notice</p>
             <p className="text-amber-700">{duplicateWarning}</p>
           </div>
         </div>
       )}
 
-      {/* Success and Auto-Import Banner */}
+      {/* Success and View Links */}
       {successMessage && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
           <div className="flex items-center justify-between">
@@ -304,17 +327,23 @@ export default function UploadPage() {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
                 <p className="text-sm font-bold text-emerald-900">{successMessage}</p>
-                <p className="text-xs text-emerald-700">
-                  {importedSuccessfully ? '✓ Synced & Imported into Cases Master Grid! Redirecting...' : 'Ready for Cases Grid.'}
-                </p>
+                <p className="text-xs text-emerald-700">✓ All claims, doctor shares, and withholding taxes synced!</p>
               </div>
             </div>
-            <button
-              onClick={() => importClaimsToCases(currentParsedClaims)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm transition"
-            >
-              <Check className="w-4 h-4" /> View in Cases Grid
-            </button>
+            <div className="flex gap-2">
+              <Link
+                href="/cases"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white text-xs font-semibold rounded-lg hover:bg-slate-800 transition"
+              >
+                View in Cases Grid <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/doctor-summary"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm transition"
+              >
+                View Doctor PF & WTax <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-200/60 text-xs">

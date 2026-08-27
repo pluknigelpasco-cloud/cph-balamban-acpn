@@ -1,7 +1,33 @@
 import { ClaimItem } from '@/types';
 
+export function cleanDoctorString(raw: string): string[] {
+  let cleaned = raw
+    .replace(/Credited/gi, '')
+    .replace(/Date Generated:[\s\S]*$/gi, '')
+    .replace(/--\s+of\s+--/gi, '')
+    .replace(/Page\s+\d+\s+of\s+\d+/gi, '')
+    .replace(/Run\s+Date:\s+[\d/:\sAPMapm]+/gi, '')
+    .replace(/\d{4}\s+\d{2}:\d{2}:\d{2}\s+[APMapm]{2}/gi, '')
+    .replace(/AUTO CREDIT PAYMENT NOTICE/gi, '')
+    .replace(/PERIOD COVERED:[\s\S]*?Bank Account No\.:\s*\d+/gi, '')
+    .replace(/PABN No\.[\s\S]*?WTax\s+HCI\s+PF/gi, '')
+    .replace(/GRAND TOTAL[\s\S]*/gi, '')
+    .trim();
+
+  const docs = cleaned.split(/[;/]/).map(d => {
+    let dClean = d.replace(/[\r\n]+/g, ' ')
+      .replace(/\b\d{2}\b/g, '')
+      .replace(/PABN.*PF/gi, '')
+      .replace(/Total.*PF/gi, '')
+      .replace(/Date Generated:.*/gi, '')
+      .trim();
+    return dClean;
+  }).filter(d => d && d.length > 3 && !/^\d+$/.test(d) && !d.includes('PABN') && !d.includes('WTax') && !d.includes('Generated'));
+
+  return docs;
+}
+
 export function parseAcpnText(fullText: string): ClaimItem[] {
-  // Split anywhere by PABN pattern P\d{2}-\d{4}-\d{5}
   const claimBlocks = fullText.split(/(?=P\d{2}-\d{4}-\d{5})/g);
   const claims: ClaimItem[] = [];
 
@@ -9,13 +35,11 @@ export function parseAcpnText(fullText: string): ClaimItem[] {
     const trimmed = block.trim();
     if (!trimmed.match(/^P\d{2}-\d{4}-\d{5}/)) continue;
 
-    // Match PABN, 13-digit Series, and 13-char PIN (using [\s\S]+ instead of /s flag)
     const headerMatch = trimmed.match(/^(P\d{2}-\d{4}-\d{5})\s+(\d{13})\s+(P\d{12})\s+([\s\S]+)$/);
     if (!headerMatch) continue;
 
     const [_, pabn, series, pin, rest] = headerMatch;
 
-    // Match Confinement Period: \d{2}/\d{2}/\d{4} to \d{2}/\d{2}/\d{4}
     const periodMatch = rest.match(/(\d{2}\/\d{2}\/\d{4}\s+to\s+\d{2}\/\d{2}\/\d{4})/);
     if (!periodMatch) continue;
 
@@ -23,16 +47,14 @@ export function parseAcpnText(fullText: string): ClaimItem[] {
     const patientName = rest.slice(0, pIdx).trim();
     const afterPeriod = rest.slice(pIdx + periodMatch[0].length).trim();
 
-    // Extract Doctors
     let financials = afterPeriod;
     let doctorText = '';
     const docIdx = afterPeriod.indexOf('Health Care Professional/s:');
     if (docIdx !== -1) {
       financials = afterPeriod.slice(0, docIdx).trim();
-      doctorText = afterPeriod.slice(docIdx + 'Health Care Professional/s:'.length).replace(/Credited/g, '').trim();
+      doctorText = afterPeriod.slice(docIdx + 'Health Care Professional/s:'.length);
     }
 
-    // Extract Numbers: TotalGross, WTax, HCI, PF
     const nums: number[] = [];
     const tokens = financials.split(/\s+/);
     for (const t of tokens) {
@@ -58,7 +80,7 @@ export function parseAcpnText(fullText: string): ClaimItem[] {
       totalGross = hci + pf;
     }
 
-    const doctors = doctorText.split(';').map(d => d.trim()).filter(Boolean);
+    const doctors = cleanDoctorString(doctorText);
 
     claims.push({
       pabn,
