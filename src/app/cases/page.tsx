@@ -6,13 +6,17 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { recalculateCase } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
-import { Search, Filter, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud } from 'lucide-react';
+import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CasesPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
 
   // Load from localStorage
   useEffect(() => {
@@ -56,12 +60,12 @@ export default function CasesPage() {
     return cases.filter(c => {
       const matchesMonth = selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month;
       const matchesArchive = showArchived ? (c as any).isArchived : !(c as any).isArchived;
-      const matchesDoctorRole = !isDoctorRole || c.surgeon.includes(doctorName) || c.anesth.includes(doctorName) || (c.imPediaGp && c.imPediaGp.includes(doctorName));
+      const matchesDoctorRole = !isDoctorRole || (c.surgeon && c.surgeon.includes(doctorName)) || (c.anesth && c.anesth.includes(doctorName)) || (c.imPediaGp && c.imPediaGp.includes(doctorName));
 
       const matchesSearch =
         searchTerm === '' ||
-        c.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.itemNo.includes(searchTerm) ||
+        (c.patientName && c.patientName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (c.itemNo && c.itemNo.includes(searchTerm)) ||
         (c.surgeon && c.surgeon.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.anesth && c.anesth.toLowerCase().includes(searchTerm.toLowerCase()));
 
@@ -78,6 +82,13 @@ export default function CasesPage() {
       return matchesMonth && matchesArchive && matchesDoctorRole && matchesSearch && matchesDoctor && matchesRemark;
     });
   }, [cases, selectedMonth, showArchived, isDoctorRole, doctorName, searchTerm, selectedDoctor, selectedRemark]);
+
+  // Total pages
+  const totalPages = Math.ceil(filteredCases.length / pageSize) || 1;
+  const paginatedCases = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredCases.slice(start, start + pageSize);
+  }, [filteredCases, currentPage, pageSize]);
 
   const updateAndPersist = (updatedCases: CaseItem[]) => {
     setCases(updatedCases);
@@ -108,7 +119,7 @@ export default function CasesPage() {
   };
 
   const handleResetAllCases = () => {
-    if (confirm('Are you sure you want to CLEAR all cases? This allows you to start 100% fresh from your uploaded PDFs.')) {
+    if (confirm('Are you sure you want to CLEAR all cases? This allows you to start fresh.')) {
       updateAndPersist([]);
     }
   };
@@ -151,7 +162,7 @@ export default function CasesPage() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
             <p className="text-xs text-slate-500">
-              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> active cases for <strong className="text-slate-800">{selectedMonth}</strong>
+              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> active claims for <strong className="text-slate-800">{selectedMonth}</strong>
             </p>
           </div>
 
@@ -232,14 +243,14 @@ export default function CasesPage() {
         </div>
       </div>
 
-      {/* Spreadsheet Data Grid or Clean Empty State */}
+      {/* Spreadsheet Data Grid with Sequential Numbering (1, 2, 3...) and Pagination */}
       <div className="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
         {filteredCases.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
             <div className="p-4 bg-emerald-50 text-emerald-600 rounded-full">
               <UploadCloud className="w-8 h-8" />
             </div>
-            <h3 className="font-bold text-base text-slate-900">Cases Grid is Clean & Ready</h3>
+            <h3 className="font-bold text-base text-slate-900">Cases Grid is Ready</h3>
             <p className="text-xs text-slate-500 max-w-sm">
               Upload your official PhilHealth ACPN PDF to populate all claims and automatic sharing formulas.
             </p>
@@ -263,10 +274,10 @@ export default function CasesPage() {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-900 text-white font-semibold sticky top-0 z-10">
                 <tr>
-                  <th className="p-2.5 border-r border-slate-800 w-10 text-center">#</th>
+                  <th className="p-2.5 border-r border-slate-800 w-12 text-center">#</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Surgeon</th>
-                  <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Anesthesiologist</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">Surgeon</th>
+                  <th className="p-2.5 border-r border-slate-800 min-w-[130px]">Anesthesiologist</th>
                   <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
                   <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
                   <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
@@ -278,100 +289,129 @@ export default function CasesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {filteredCases.slice(0, 150).map((item) => (
-                  <tr key={item.id} className="hover:bg-emerald-50/40 transition">
-                    <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500">{item.itemNo}</td>
-                    <td className="p-2 border-r border-slate-200 font-medium text-slate-900">
-                      <input
-                        type="text"
-                        value={item.patientName}
-                        onChange={(e) => handleUpdateRow(item.id, 'patientName', e.target.value)}
-                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                      />
-                    </td>
-                    <td className="p-2 border-r border-slate-200">
-                      <input
-                        type="text"
-                        value={item.surgeon}
-                        onChange={(e) => handleUpdateRow(item.id, 'surgeon', e.target.value)}
-                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                      />
-                    </td>
-                    <td className="p-2 border-r border-slate-200">
-                      <input
-                        type="text"
-                        value={item.anesth}
-                        onChange={(e) => handleUpdateRow(item.id, 'anesth', e.target.value)}
-                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                      />
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-slate-600">
-                      <input
-                        type="text"
-                        value={item.imPediaGp}
-                        onChange={(e) => handleUpdateRow(item.id, 'imPediaGp', e.target.value)}
-                        className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
-                      />
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-center">
-                      <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-700">
-                        {item.remarks || '-'}
-                      </span>
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
-                      <input
-                        type="number"
-                        value={item.totalAmount}
-                        onChange={(e) => handleUpdateRow(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
-                        className="w-full text-right bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5 font-bold"
-                      />
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right text-amber-700 font-medium">
-                      ₱{item.forPool?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right font-semibold text-slate-800">
-                      ₱{item.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-700">
-                      ₱{item.surgeonShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
-                      ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="p-2 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => handleToggleArchive(item.id)}
-                          className="p-1 text-slate-400 hover:text-amber-600"
-                          title={(item as any).isArchived ? 'Restore' : 'Archive'}
-                        >
-                          {(item as any).isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCase(item.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {paginatedCases.map((item, idx) => {
+                  const globalRowIndex = (currentPage - 1) * pageSize + idx + 1;
+                  return (
+                    <tr key={item.id} className="hover:bg-emerald-50/40 transition">
+                      <td className="p-2 border-r border-slate-200 text-center font-mono text-slate-500 font-bold bg-slate-50">
+                        {globalRowIndex}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 font-medium text-slate-900">
+                        <input
+                          type="text"
+                          value={item.patientName}
+                          onChange={(e) => handleUpdateRow(item.id, 'patientName', e.target.value)}
+                          className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="text"
+                          value={item.surgeon}
+                          onChange={(e) => handleUpdateRow(item.id, 'surgeon', e.target.value)}
+                          className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200">
+                        <input
+                          type="text"
+                          value={item.anesth}
+                          onChange={(e) => handleUpdateRow(item.id, 'anesth', e.target.value)}
+                          className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-slate-600">
+                        <input
+                          type="text"
+                          value={item.imPediaGp}
+                          onChange={(e) => handleUpdateRow(item.id, 'imPediaGp', e.target.value)}
+                          className="w-full bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-center">
+                        <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-700">
+                          {item.remarks || '-'}
+                        </span>
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-bold text-slate-900 bg-slate-50">
+                        <input
+                          type="number"
+                          value={item.totalAmount}
+                          onChange={(e) => handleUpdateRow(item.id, 'totalAmount', parseFloat(e.target.value) || 0)}
+                          className="w-full text-right bg-transparent hover:bg-white focus:bg-white focus:ring-1 focus:ring-emerald-500 rounded px-1 py-0.5 font-bold"
+                        />
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right text-amber-700 font-medium">
+                        ₱{item.forPool?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-semibold text-slate-800">
+                        ₱{item.balance?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-bold text-emerald-700">
+                        ₱{item.surgeonShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
+                        ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => handleToggleArchive(item.id)}
+                            className="p-1 text-slate-400 hover:text-amber-600"
+                            title={(item as any).isArchived ? 'Restore' : 'Archive'}
+                          >
+                            {(item as any).isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCase(item.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
 
-        {/* Footer Summary Row */}
+        {/* Footer Summary Row & Pagination Controls */}
         {filteredCases.length > 0 && (
-          <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold">
-            <div>Total Active Cases: {filteredCases.length} ({selectedMonth})</div>
-            <div className="flex gap-6">
-              <span>Gross Total: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-              <span>Pool Retained: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-              <span>Surgeon Share: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
-              <span>Anesth Share: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+          <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold gap-3">
+            <div className="flex items-center gap-4">
+              <div>Total Claims: <span className="text-emerald-400 font-bold">{filteredCases.length}</span> ({selectedMonth})</div>
+              
+              {/* Pagination Controls */}
+              <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                <button
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  className="p-0.5 text-slate-300 disabled:text-slate-600 hover:text-white"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-mono text-[11px]">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  className="p-0.5 text-slate-300 disabled:text-slate-600 hover:text-white"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <span>Gross: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Pool: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Surgeons: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+              <span>Anesth: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
             </div>
           </div>
         )}
