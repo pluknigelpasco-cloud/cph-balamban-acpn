@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check, X, ShieldAlert, SkipForward, RotateCw } from 'lucide-react';
 import { parseAcpnText } from '@/lib/acpnParser';
 import { recalculateCase } from '@/lib/computationEngine';
 import { usePeriod } from '@/context/PeriodContext';
@@ -20,6 +20,14 @@ interface UploadedBatch {
   claims: ClaimItem[];
 }
 
+interface PendingUpload {
+  batches: UploadedBatch[];
+  allClaims: ClaimItem[];
+  duplicateClaims: ClaimItem[];
+  uniqueNewClaims: ClaimItem[];
+  month: string;
+}
+
 export default function UploadPage() {
   const router = useRouter();
   const { selectedMonth, setSelectedMonth } = usePeriod();
@@ -32,6 +40,9 @@ export default function UploadPage() {
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [importedSuccessfully, setImportedSuccessfully] = useState(false);
+
+  // Duplicate Modal State
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('cph_acpn_batches');
@@ -74,7 +85,13 @@ export default function UploadPage() {
     return fullText;
   };
 
-  const importClaimsToCases = (claimsToImport: ClaimItem[], month: string) => {
+  const commitClaimsToDatabase = (batchesToSave: UploadedBatch[], claimsToImport: ClaimItem[], month: string) => {
+    // 1. Save Batches
+    const updatedBatches = [...batchesToSave, ...uploadedBatches];
+    setUploadedBatches(updatedBatches);
+    localStorage.setItem('cph_acpn_batches', JSON.stringify(updatedBatches));
+
+    // 2. Import into Cases Master Grid
     const savedCasesStr = localStorage.getItem('cph_cases_data');
     let existingCases: CaseItem[] = [];
     if (savedCasesStr) {
@@ -105,7 +122,7 @@ export default function UploadPage() {
       } else if (c.pf >= 20000) {
         remark = 'C/S';
       } else if (c.pf >= 10000) {
-        remark = 'OR Case';
+        remark = '49080';
       } else if (surgeon.toLowerCase().includes('estalani')) {
         remark = 'Dental';
       }
@@ -130,7 +147,11 @@ export default function UploadPage() {
 
     const combined = [...newCases, ...existingCases];
     localStorage.setItem('cph_cases_data', JSON.stringify(combined));
+
+    setCurrentParsedClaims(claimsToImport);
+    setSuccessMessage(`Successfully imported ${claimsToImport.length} claims into ${month} database!`);
     setImportedSuccessfully(true);
+    setPendingUpload(null);
   };
 
   const handleFilesUpload = async (files: FileList | File[]) => {
@@ -140,39 +161,43 @@ export default function UploadPage() {
     setDuplicateWarning(null);
     setSuccessMessage(null);
     setImportedSuccessfully(false);
+    setPendingUpload(null);
+
     const newBatches: UploadedBatch[] = [];
     const allParsed: ClaimItem[] = [];
 
+    // Existing series numbers already in system
     const existingSeries = new Set<string>();
-    uploadedBatches.forEach(b => b.claims.forEach(c => existingSeries.add(c.series)));
+    const savedCasesStr = localStorage.getItem('cph_cases_data');
+    if (savedCasesStr) {
+      try {
+        const cases: any[] = JSON.parse(savedCasesStr);
+        cases.forEach(c => { if (c.series) existingSeries.add(c.series); });
+      } catch (e) {}
+    }
+    uploadedBatches.forEach(b => b.claims.forEach(c => { if (c.series) existingSeries.add(c.series); }));
+
+    const duplicateClaims: ClaimItem[] = [];
+    const uniqueNewClaims: ClaimItem[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.name.endsWith('.pdf')) continue;
 
-      setLoadingStatus(`Processing file ${i + 1} of ${files.length}: ${file.name}...`);
+      setLoadingStatus(`Scanning file ${i + 1} of ${files.length}: ${file.name}...`);
 
       try {
-        const isFileDuplicate = uploadedBatches.some(b => b.fileName === file.name && b.month === targetMonth);
-        if (isFileDuplicate) {
-          setDuplicateWarning(`Notice: "${file.name}" was already uploaded previously for ${targetMonth}.`);
-        }
-
         const rawText = await extractTextFromPdf(file);
         const claims = parseAcpnText(rawText);
 
-        let duplicateClaimCount = 0;
         claims.forEach(c => {
           if (c.series && existingSeries.has(c.series)) {
-            duplicateClaimCount++;
+            duplicateClaims.push(c);
           } else {
             if (c.series) existingSeries.add(c.series);
+            uniqueNewClaims.push(c);
           }
         });
-
-        if (duplicateClaimCount > 0) {
-          setDuplicateWarning(`Duplicate Check: Found ${duplicateClaimCount} duplicate claims in "${file.name}".`);
-        }
 
         const grossTotal = claims.reduce((a, c) => a + (c.totalGross || 0), 0);
         const pfTotal = claims.reduce((a, c) => a + (c.pf || 0), 0);
@@ -196,17 +221,22 @@ export default function UploadPage() {
       }
     }
 
-    if (newBatches.length > 0) {
-      const updated = [...newBatches, ...uploadedBatches];
-      setUploadedBatches(updated);
-      localStorage.setItem('cph_acpn_batches', JSON.stringify(updated));
-      setCurrentParsedClaims(allParsed);
-      setSuccessMessage(`Successfully parsed ${allParsed.length} claims from ${newBatches.length} PDF file(s) for ${targetMonth}!`);
-      importClaimsToCases(allParsed, targetMonth);
-    }
-
     setIsLoading(false);
     setLoadingStatus('');
+
+    // IF DUPLICATES ARE FOUND: DO NOT AUTO-COMMIT! PAUSE AND PROMPT USER!
+    if (duplicateClaims.length > 0) {
+      setPendingUpload({
+        batches: newBatches,
+        allClaims: allParsed,
+        duplicateClaims,
+        uniqueNewClaims,
+        month: targetMonth
+      });
+    } else if (newBatches.length > 0) {
+      // 0 duplicates found -> Proceed safely directly
+      commitClaimsToDatabase(newBatches, allParsed, targetMonth);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -243,6 +273,7 @@ export default function UploadPage() {
       setCurrentParsedClaims([]);
       setSuccessMessage(null);
       setDuplicateWarning(null);
+      setPendingUpload(null);
     }
   };
 
@@ -261,11 +292,11 @@ export default function UploadPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">Auto-Detects Hemo, Surgeries & Doctor Splits</span>
+            <span className="text-xs text-slate-500">Smart Duplicate Protection</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
-            Upload official monthly ACPN PDFs. Clearing uploads only affects the selected month (<strong className="text-emerald-700">{targetMonth}</strong>).
+            Upload official monthly ACPN PDFs. System pauses automatically when duplicate series claims are detected.
           </p>
         </div>
 
@@ -329,13 +360,94 @@ export default function UploadPage() {
         </label>
       </div>
 
-      {/* Duplicate Warning */}
-      {duplicateWarning && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-          <div className="text-xs">
-            <p className="font-bold text-amber-900">Notice</p>
-            <p className="text-amber-700">{duplicateWarning}</p>
+      {/* Interactive Duplicate Claims Warning Modal */}
+      {pendingUpload && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-100 text-amber-800 rounded-xl">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">Duplicate Claims Detected — Upload Paused</h3>
+                  <p className="text-xs text-slate-500">
+                    The system halted auto-import to prevent duplicate records in {pendingUpload.month}.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPendingUpload(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Duplicate Statistics Banner */}
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <span className="text-slate-500 uppercase font-bold text-[10px]">Total Scanned</span>
+                <p className="text-base font-bold text-slate-900 mt-0.5">{pendingUpload.allClaims.length} claims</p>
+              </div>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                <span className="text-amber-700 uppercase font-bold text-[10px]">Duplicates Found</span>
+                <p className="text-base font-bold text-amber-900 mt-0.5">{pendingUpload.duplicateClaims.length} duplicate(s)</p>
+              </div>
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                <span className="text-emerald-700 uppercase font-bold text-[10px]">New Unique Claims</span>
+                <p className="text-base font-bold text-emerald-800 mt-0.5">{pendingUpload.uniqueNewClaims.length} new claim(s)</p>
+              </div>
+            </div>
+
+            {/* Duplicate Claims Sample List */}
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-slate-800">
+                Sample Duplicate Claims (Already existing in database):
+              </p>
+              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 text-xs">
+                {pendingUpload.duplicateClaims.slice(0, 8).map((c, i) => (
+                  <div key={i} className="p-2.5 flex justify-between items-center bg-slate-50 hover:bg-slate-100">
+                    <div>
+                      <p className="font-bold text-slate-900">{c.patientName}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">Series: {c.series} • PABN: {c.pabn}</p>
+                    </div>
+                    <span className="font-bold font-mono text-amber-700">₱{(c.pf || 0).toLocaleString()}</span>
+                  </div>
+                ))}
+                {pendingUpload.duplicateClaims.length > 8 && (
+                  <p className="p-2 text-center text-[11px] text-slate-400 italic">
+                    ...and {pendingUpload.duplicateClaims.length - 8} more duplicate claims
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Decision Action Buttons */}
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-2 text-xs font-bold">
+              <button
+                onClick={() => setPendingUpload(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition"
+              >
+                Cancel Upload
+              </button>
+
+              {pendingUpload.uniqueNewClaims.length > 0 && (
+                <button
+                  onClick={() => commitClaimsToDatabase(pendingUpload.batches, pendingUpload.uniqueNewClaims, pendingUpload.month)}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow transition"
+                >
+                  <SkipForward className="w-4 h-4" /> Skip Duplicates & Import {pendingUpload.uniqueNewClaims.length} New Claims
+                </button>
+              )}
+
+              <button
+                onClick={() => commitClaimsToDatabase(pendingUpload.batches, pendingUpload.allClaims, pendingUpload.month)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow transition"
+              >
+                <RotateCw className="w-4 h-4" /> Force Import All ({pendingUpload.allClaims.length} claims)
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -348,7 +460,7 @@ export default function UploadPage() {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
                 <p className="text-sm font-bold text-emerald-900">{successMessage}</p>
-                <p className="text-xs text-emerald-700">✓ All claims, Hemo splits, doctor shares, and withholding taxes synced!</p>
+                <p className="text-xs text-emerald-700">✓ All verified claims, Hemo splits, doctor shares, and withholding taxes synced!</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -369,7 +481,7 @@ export default function UploadPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-200/60 text-xs">
             <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
-              <span className="text-slate-500 text-[10px] uppercase font-bold">Total Claims</span>
+              <span className="text-slate-500 text-[10px] uppercase font-bold">Imported Claims</span>
               <p className="text-base font-bold text-slate-900">{currentParsedClaims.length}</p>
             </div>
             <div className="bg-white p-2.5 rounded-lg border border-emerald-200">
