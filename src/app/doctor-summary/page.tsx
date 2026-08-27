@@ -2,15 +2,22 @@
 
 import React, { useState, useMemo } from 'react';
 import initialData from '@/lib/initialData.json';
+import { usePeriod } from '@/context/PeriodContext';
+import { useAuth } from '@/context/AuthContext';
 import { CaseItem, DoctorSummaryItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
-import { Search, Download, Printer, Users, DollarSign, FileText } from 'lucide-react';
+import { Search, Download, Printer, Users, DollarSign, FileText, Calendar } from 'lucide-react';
 
 export default function DoctorSummaryPage() {
+  const { selectedMonth } = usePeriod();
+  const { user } = useAuth();
   const [cases] = useState<CaseItem[]>(initialData.casesData as CaseItem[]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoctorForSlip, setSelectedDoctorForSlip] = useState<DoctorSummaryItem | null>(null);
+
+  const isDoctorRole = user?.role === 'doctor';
+  const doctorName = user?.doctorName || '';
 
   // Compute doctor summaries
   const doctorSummaries = useMemo(() => {
@@ -19,11 +26,12 @@ export default function DoctorSummaryPage() {
 
   // Filtered summaries
   const filteredDoctors = useMemo(() => {
-    return doctorSummaries.filter(d =>
-      d.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.specialty.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [doctorSummaries, searchTerm]);
+    return doctorSummaries.filter(d => {
+      const matchesDoctorRole = !isDoctorRole || d.doctorName.includes(doctorName);
+      const matchesSearch = d.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) || d.specialty.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesDoctorRole && matchesSearch;
+    });
+  }, [doctorSummaries, isDoctorRole, doctorName, searchTerm]);
 
   const totalGross = filteredDoctors.reduce((acc, d) => acc + d.grossPf, 0);
   const totalWtax = filteredDoctors.reduce((acc, d) => acc + d.wtax20, 0);
@@ -34,17 +42,23 @@ export default function DoctorSummaryPage() {
       {/* Header */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Doctor Professional Fee (PF) & 20% WTax Summary</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Master compensation list with 20% Withholding Tax deduction (<span className="font-mono text-emerald-700">=F*0.2</span>), Net PF (<span className="font-mono text-emerald-700">=F-G</span>), and Medical/Non-Medical pool cuts.
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
+              <Calendar className="w-3 h-3" /> PERIOD: {selectedMonth}
+            </span>
+            <span className="text-xs text-slate-500">Official Withholding Tax (20%) Deduction</span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mt-1">Doctor Professional Fee (PF) Summary</h1>
+          <p className="text-sm text-slate-500">
+            Calculated compensation with 20% Withholding Tax deduction (<span className="font-mono text-emerald-700">=Gross * 0.20</span>) and Net PF Payable (<span className="font-mono text-emerald-700">=Gross - Tax</span>).
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => exportDoctorSummaryToPdf(filteredDoctors)}
+            onClick={() => exportDoctorSummaryToPdf(filteredDoctors, selectedMonth)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
           >
-            <Download className="w-4 h-4" /> Download PDF Report
+            <Download className="w-4 h-4" /> Download {selectedMonth} PDF Report
           </button>
         </div>
       </div>
@@ -52,21 +66,21 @@ export default function DoctorSummaryPage() {
       {/* Summary KPI Banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Gross PF</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Gross PF ({selectedMonth})</span>
           <p className="text-2xl font-bold text-slate-900 mt-1">₱{totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-slate-500 mt-1">Total earned before withholding tax</p>
+          <p className="text-xs text-slate-500 mt-1">Total earned before tax deduction</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Total 20% Withholding Tax</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">20% Withholding Tax</span>
           <p className="text-2xl font-bold text-amber-700 mt-1">₱{totalWtax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
           <p className="text-xs text-amber-600 mt-1">Tax withheld (=Gross * 0.20)</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Total Net PF Payable</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">Net PF Payable ({selectedMonth})</span>
           <p className="text-2xl font-bold text-emerald-700 mt-1">₱{totalNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-emerald-600 mt-1">Net amount after tax deduction</p>
+          <p className="text-xs text-emerald-600 mt-1">Net payable to doctors</p>
         </div>
       </div>
 
@@ -78,7 +92,7 @@ export default function DoctorSummaryPage() {
           placeholder="Search doctor name or specialty..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500"
         />
       </div>
 
@@ -118,7 +132,7 @@ export default function DoctorSummaryPage() {
                     onClick={() => setSelectedDoctorForSlip(doc)}
                     className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-[11px] font-semibold transition"
                   >
-                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> Payslip
+                    <FileText className="w-3.5 h-3.5 text-emerald-600" /> Printable Payslip
                   </button>
                 </td>
               </tr>
@@ -127,14 +141,14 @@ export default function DoctorSummaryPage() {
         </table>
       </div>
 
-      {/* Doctor Payslip Modal */}
+      {/* Doctor Payslip Modal with Active Month */}
       {selectedDoctorForSlip && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-slate-200">
             <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-base text-slate-900">CEBU PROVINCIAL HOSPITAL - BALAMBAN</h3>
-                <p className="text-xs text-slate-500">Official PhilHealth PF Sharing Payslip</p>
+                <p className="text-xs text-slate-500">Official PhilHealth PF Sharing Payslip ({selectedMonth})</p>
               </div>
               <button
                 onClick={() => setSelectedDoctorForSlip(null)}
@@ -154,8 +168,8 @@ export default function DoctorSummaryPage() {
                 <span className="text-slate-700">{selectedDoctorForSlip.specialty}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Period:</span>
-                <span className="font-medium text-slate-900">JUNE / AUGUST 2026</span>
+                <span className="text-slate-500">Active Period:</span>
+                <span className="font-bold text-emerald-800">{selectedMonth}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Total Cases Handled:</span>

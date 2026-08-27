@@ -2,21 +2,31 @@
 
 import React, { useState, useMemo } from 'react';
 import initialData from '@/lib/initialData.json';
+import { usePeriod } from '@/context/PeriodContext';
+import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { recalculateCase } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
-import { Search, Filter, Download, Plus, RefreshCw, Layers } from 'lucide-react';
+import { Search, Filter, Download, Plus, Archive, Trash2, RotateCcw } from 'lucide-react';
 
 export default function CasesPage() {
-  const [cases, setCases] = useState<CaseItem[]>(initialData.casesData as CaseItem[]);
-  
-  // Filters
+  const { selectedMonth } = usePeriod();
+  const { user } = useAuth();
+  const [cases, setCases] = useState<CaseItem[]>((initialData.casesData as any).map((c: any) => ({
+    ...c,
+    month: 'JUNE 2026',
+    isArchived: false
+  })));
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('ALL');
   const [selectedRemark, setSelectedRemark] = useState('ALL');
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
-  // Extract unique doctors and remarks for filter dropdowns
+  // If user is a Doctor, pre-filter by doctor
+  const isDoctorRole = user?.role === 'doctor';
+  const doctorName = user?.doctorName || '';
+
   const doctorOptions = useMemo(() => {
     const set = new Set<string>();
     cases.forEach(c => {
@@ -40,6 +50,15 @@ export default function CasesPage() {
   // Filtered cases
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
+      // Month match
+      const matchesMonth = selectedMonth === 'ALL' || (c as any).month === selectedMonth;
+
+      // Archive status match
+      const matchesArchive = showArchived ? (c as any).isArchived : !(c as any).isArchived;
+
+      // Doctor role match
+      const matchesDoctorRole = !isDoctorRole || c.surgeon.includes(doctorName) || c.anesth.includes(doctorName) || (c.imPediaGp && c.imPediaGp.includes(doctorName));
+
       // Search term
       const matchesSearch =
         searchTerm === '' ||
@@ -48,23 +67,22 @@ export default function CasesPage() {
         (c.surgeon && c.surgeon.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (c.anesth && c.anesth.toLowerCase().includes(searchTerm.toLowerCase()));
 
-      // Doctor filter
+      // Dropdown doctor
       const matchesDoctor =
         selectedDoctor === 'ALL' ||
         c.surgeon === selectedDoctor ||
         c.anesth === selectedDoctor ||
         (c.imPediaGp && c.imPediaGp.includes(selectedDoctor));
 
-      // Remark filter
+      // Dropdown remark
       const matchesRemark =
         selectedRemark === 'ALL' ||
         c.remarks === selectedRemark;
 
-      return matchesSearch && matchesDoctor && matchesRemark;
+      return matchesMonth && matchesArchive && matchesDoctorRole && matchesSearch && matchesDoctor && matchesRemark;
     });
-  }, [cases, searchTerm, selectedDoctor, selectedRemark]);
+  }, [cases, selectedMonth, showArchived, isDoctorRole, doctorName, searchTerm, selectedDoctor, selectedRemark]);
 
-  // Update a single case row with live formula recalculation
   const handleUpdateRow = (id: string, field: keyof CaseItem, value: any) => {
     setCases(prev => prev.map(item => {
       if (item.id === id) {
@@ -75,7 +93,16 @@ export default function CasesPage() {
     }));
   };
 
-  // Add new case
+  const handleToggleArchive = (id: string) => {
+    setCases(prev => prev.map(c => c.id === id ? { ...c, isArchived: !(c as any).isArchived } as any : c));
+  };
+
+  const handleDeleteCase = (id: string) => {
+    if (confirm('Are you sure you want to permanently delete this case?')) {
+      setCases(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
   const handleAddNewCase = () => {
     const newCase = recalculateCase({
       id: `case-${Date.now()}`,
@@ -87,13 +114,11 @@ export default function CasesPage() {
       remarks: '1D',
       totalAmount: 10000,
     });
-    setCases([newCase, ...cases]);
+    setCases([{ ...newCase, month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth, isArchived: false } as any, ...cases]);
   };
 
-  // Summary figures of current filtered view
   const sumTotalAmount = filteredCases.reduce((acc, c) => acc + (c.totalAmount || 0), 0);
   const sumForPool = filteredCases.reduce((acc, c) => acc + (c.forPool || 0), 0);
-  const sumBalance = filteredCases.reduce((acc, c) => acc + (c.balance || 0), 0);
   const sumSurgeonShare = filteredCases.reduce((acc, c) => acc + (c.surgeonShare || 0), 0);
   const sumAnesthShare = filteredCases.reduce((acc, c) => acc + (c.anesthShare || 0), 0);
 
@@ -103,12 +128,32 @@ export default function CasesPage() {
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Cases Master Grid & Formula Engine</h1>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-md">
+                PERIOD: {selectedMonth}
+              </span>
+              {showArchived && (
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[11px] font-bold rounded-md">
+                  ARCHIVED VIEW
+                </span>
+              )}
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
             <p className="text-xs text-slate-500">
-              Showing <span className="font-semibold text-emerald-600">{filteredCases.length}</span> of {cases.length} cases | Live recalculations enabled
+              Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> cases for <strong className="text-slate-800">{selectedMonth}</strong>
             </p>
           </div>
+
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowArchived(!showArchived)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                showArchived ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" />
+              {showArchived ? 'Active Cases' : 'Archived Cases'}
+            </button>
             <button
               onClick={handleAddNewCase}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition"
@@ -116,7 +161,7 @@ export default function CasesPage() {
               <Plus className="w-4 h-4" /> Add Case
             </button>
             <button
-              onClick={() => exportCasesToExcel(filteredCases)}
+              onClick={() => exportCasesToExcel(filteredCases, `CPH_Balamban_Cases_${selectedMonth}.xlsx`)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition"
             >
               <Download className="w-4 h-4" /> Export .XLSX
@@ -133,7 +178,7 @@ export default function CasesPage() {
               placeholder="Search patient, doctor, #..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
             />
           </div>
 
@@ -141,7 +186,7 @@ export default function CasesPage() {
             <select
               value={selectedDoctor}
               onChange={(e) => setSelectedDoctor(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
             >
               <option value="ALL">All Doctors ({doctorOptions.length})</option>
               {doctorOptions.map((doc) => (
@@ -154,7 +199,7 @@ export default function CasesPage() {
             <select
               value={selectedRemark}
               onChange={(e) => setSelectedRemark(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
             >
               <option value="ALL">All Remarks / Types ({remarkOptions.length})</option>
               {remarkOptions.map((rem) => (
@@ -175,17 +220,18 @@ export default function CasesPage() {
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-900 text-white font-semibold sticky top-0 z-10">
               <tr>
-                <th className="p-2.5 border-r border-slate-800 w-12 text-center">#</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[180px]">Patient Name</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[120px]">Surgeon</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[120px]">Anesthesiologist</th>
-                <th className="p-2.5 border-r border-slate-800 min-w-[140px]">IM / Pedia / GP</th>
-                <th className="p-2.5 border-r border-slate-800 w-24 text-center">Remarks</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[100px] bg-slate-800">Total Amount</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-amber-300">For Pool</th>
-                <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px]">Balance</th>
+                <th className="p-2.5 border-r border-slate-800 w-10 text-center">#</th>
+                <th className="p-2.5 border-r border-slate-800 min-w-[170px]">Patient Name</th>
+                <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Surgeon</th>
+                <th className="p-2.5 border-r border-slate-800 min-w-[110px]">Anesthesiologist</th>
+                <th className="p-2.5 border-r border-slate-800 min-w-[130px]">IM / Pedia / GP</th>
+                <th className="p-2.5 border-r border-slate-800 w-20 text-center">Remarks</th>
+                <th className="p-2.5 border-r border-slate-800 text-right min-w-[95px] bg-slate-800">Total Amount</th>
+                <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px] text-amber-300">For Pool</th>
+                <th className="p-2.5 border-r border-slate-800 text-right min-w-[85px]">Balance</th>
                 <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-emerald-300">Surgeon (70%/100%)</th>
                 <th className="p-2.5 border-r border-slate-800 text-right min-w-[90px] text-sky-300">Anesth (30%)</th>
+                <th className="p-2.5 text-center w-16">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -249,6 +295,24 @@ export default function CasesPage() {
                   <td className="p-2 border-r border-slate-200 text-right font-bold text-sky-700">
                     ₱{item.anesthShare?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
+                  <td className="p-2 text-center">
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => handleToggleArchive(item.id)}
+                        className="p-1 text-slate-400 hover:text-amber-600"
+                        title={(item as any).isArchived ? 'Restore' : 'Archive'}
+                      >
+                        {(item as any).isArchived ? <RotateCcw className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCase(item.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -257,9 +321,9 @@ export default function CasesPage() {
 
         {/* Footer Summary Row */}
         <div className="bg-slate-900 text-white p-3 flex flex-wrap items-center justify-between text-xs font-semibold">
-          <div>Total Cases: {filteredCases.length}</div>
+          <div>Total Active Cases: {filteredCases.length} ({selectedMonth})</div>
           <div className="flex gap-6">
-            <span>Total Gross: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
+            <span>Gross Total: <span className="text-emerald-400">₱{sumTotalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
             <span>Pool Retained: <span className="text-amber-400">₱{sumForPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
             <span>Surgeon Share: <span className="text-emerald-400">₱{sumSurgeonShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
             <span>Anesth Share: <span className="text-sky-400">₱{sumAnesthShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span></span>
