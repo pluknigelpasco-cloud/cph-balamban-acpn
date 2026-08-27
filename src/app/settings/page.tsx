@@ -33,7 +33,8 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
@@ -69,11 +70,8 @@ export default function SettingsPage() {
     setPasswordError(null);
     setPasswordSuccess(null);
 
-    if (!newPassword || newPassword.length < 4) {
-      return setPasswordError('New password must be at least 4 characters long.');
-    }
-    if (newPassword !== confirmPassword) {
-      return setPasswordError('New password and confirmation do not match.');
+    if (!currentPassword.trim()) {
+      return setPasswordError('Please enter your current password.');
     }
 
     const savedUsersStr = localStorage.getItem('cph_users_list');
@@ -83,6 +81,25 @@ export default function SettingsPage() {
     }
 
     const userEmail = user?.email || 'admin@cphbalamban.gov.ph';
+    const existingUser = usersList.find(u => u.email.toLowerCase() === userEmail.toLowerCase());
+    
+    // Default initial password is 'admin' or 'doctor' if not yet explicitly modified
+    const expectedPassword = existingUser?.password || (user?.role === 'doctor' ? 'doctor' : 'admin');
+
+    if (currentPassword !== expectedPassword) {
+      return setPasswordError('Incorrect current password. Please enter your valid existing password.');
+    }
+
+    if (!newPassword || newPassword.length < 4) {
+      return setPasswordError('New password must be at least 4 characters long.');
+    }
+    if (newPassword === currentPassword) {
+      return setPasswordError('New password must be different from your current password.');
+    }
+    if (newPassword !== confirmPassword) {
+      return setPasswordError('New password and confirmation do not match.');
+    }
+
     const existingIdx = usersList.findIndex(u => u.email.toLowerCase() === userEmail.toLowerCase());
 
     if (existingIdx !== -1) {
@@ -102,7 +119,7 @@ export default function SettingsPage() {
       localStorage.setItem('cph_users_list', JSON.stringify(usersList));
     }
 
-    setPasswordSuccess('Your password has been changed successfully!');
+    setPasswordSuccess('Your password has been updated and verified successfully!');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -170,12 +187,36 @@ export default function SettingsPage() {
         )}
 
         <form onSubmit={handleChangePassword} className="space-y-4 max-w-lg">
+          {/* Current Password Field */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Current Password</label>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                placeholder="Enter your existing current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-emerald-500"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+              >
+                {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* New Password Field */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showNewPassword ? 'text' : 'password'}
                 placeholder="Enter new password (min. 4 characters)"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -184,20 +225,21 @@ export default function SettingsPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
+                onClick={() => setShowNewPassword(!showNewPassword)}
                 className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
+          {/* Confirm New Password Field */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
             <div className="relative">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showNewPassword ? 'text' : 'password'}
                 placeholder="Re-type new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -211,7 +253,7 @@ export default function SettingsPage() {
             type="submit"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow transition"
           >
-            <Lock className="w-3.5 h-3.5" /> Update My Password
+            <Lock className="w-3.5 h-3.5" /> Verify & Update Password
           </button>
         </form>
       </div>
