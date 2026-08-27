@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar } from 'lucide-react';
+import { computeDoctorSummary } from '@/lib/computationEngine';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText } from 'lucide-react';
 
 export default function DashboardPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
 
-  // Load actual cases from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('cph_cases_data');
     if (saved) {
@@ -22,14 +22,36 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const isDoctorRole = user?.role === 'doctor';
+  const doctorName = user?.doctorName || '';
+
   // Filter actual cases by active month
   const currentMonthCases = useMemo(() => {
     return cases.filter(c => {
-      return selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month;
+      const matchesMonth = selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month;
+      if (!isDoctorRole) return matchesMonth;
+      const matchesDoc = (c.surgeon && c.surgeon.includes(doctorName)) ||
+                         (c.anesth && c.anesth.includes(doctorName)) ||
+                         (c.imPediaGp && c.imPediaGp.includes(doctorName));
+      return matchesMonth && matchesDoc;
     });
-  }, [cases, selectedMonth]);
+  }, [cases, selectedMonth, isDoctorRole, doctorName]);
 
-  // Compute 100% dynamic KPIs from actual data
+  // Doctor Personal Summary
+  const doctorSummary = useMemo(() => {
+    if (!isDoctorRole) return null;
+    const summaries = computeDoctorSummary(cases.filter(c => selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month));
+    return summaries.find(s => s.doctorName.includes(doctorName)) || {
+      doctorName,
+      specialty: 'Attending Physician',
+      totalCases: currentMonthCases.length,
+      grossPf: 0,
+      wtax20: 0,
+      netPf: 0
+    };
+  }, [isDoctorRole, cases, doctorName, selectedMonth, currentMonthCases]);
+
+  // Admin computations
   const totalCasesCount = currentMonthCases.length;
   const totalGrossPF = currentMonthCases.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
   const totalPool = currentMonthCases.reduce((sum, c) => sum + (c.forPool || 0), 0);
@@ -43,139 +65,228 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              PHILHEALTH ACPN ACTIVE
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+              isDoctorRole ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200'
+            }`}>
+              {isDoctorRole ? 'DOCTOR PERSONAL PORTAL' : 'PHILHEALTH ACPN ACTIVE'}
             </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-900 text-white flex items-center gap-1">
               <Calendar className="w-3 h-3 text-emerald-400" />
               MONTH: {selectedMonth}
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 mt-1">Cebu Provincial Hospital - Balamban</h1>
+          <h1 className="text-2xl font-bold text-slate-900 mt-1">
+            {isDoctorRole ? `Welcome, ${doctorName || user?.name}` : 'Cebu Provincial Hospital - Balamban'}
+          </h1>
           <p className="text-sm text-slate-500">
-            Auto Credit Payment Notice (ACPN) & Doctor PF Sharing Dashboard | Logged in as <strong className="text-slate-800">{user?.name}</strong> ({user?.role})
+            {isDoctorRole
+              ? `Personal Professional Fee & Compensation Summary for ${selectedMonth}`
+              : `Auto Credit Payment Notice (ACPN) & Doctor PF Sharing Dashboard | Logged in as ${user?.name} (${user?.role})`
+            }
           </p>
         </div>
+
         <div className="flex items-center gap-3">
-          <Link
-            href="/upload"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium shadow-sm transition"
-          >
-            <UploadCloud className="w-4 h-4" />
-            Upload ACPN PDF
-          </Link>
+          {!isDoctorRole && (
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium shadow-sm transition"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Upload ACPN PDF
+            </Link>
+          )}
           <Link
             href="/cases"
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            View {selectedMonth} Cases ({totalCasesCount})
+            {isDoctorRole ? `View My Assigned Cases (${totalCasesCount})` : `View ${selectedMonth} Cases (${totalCasesCount})`}
           </Link>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{selectedMonth} Cases</span>
-            <div className="p-2 bg-sky-50 rounded-lg text-sky-600">
-              <Activity className="w-5 h-5" />
+      {isDoctorRole ? (
+        // DOCTOR PERSONAL KPI CARDS
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">My Handled Cases</span>
+              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <Stethoscope className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount} cases</p>
+            <p className="text-xs text-slate-500 mt-1">Cases assigned to you in {selectedMonth}</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">My Gross PF Share</span>
+              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              ₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Your total earned before tax</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">Less: 20% WTax</span>
+              <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-amber-700 mt-2">
+              ₱{(doctorSummary?.wtax20 || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-amber-600 font-medium mt-1">Withholding tax (=Gross * 0.20)</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-emerald-200 bg-emerald-50/30 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">My Net PF Payable</span>
+              <div className="p-2 bg-emerald-100 rounded-lg text-emerald-700">
+                <FileText className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-extrabold text-emerald-700 mt-2">
+              ₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-emerald-700 font-medium mt-1">Official take-home amount</p>
+          </div>
+        </div>
+      ) : (
+        // ADMIN KPI CARDS
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{selectedMonth} Cases</span>
+              <div className="p-2 bg-sky-50 rounded-lg text-sky-600">
+                <Activity className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()}</p>
+            <p className="text-xs text-slate-500 mt-1">Verified claims in period</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{selectedMonth} Total PF</span>
+              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              ₱{totalGrossPF.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-slate-500 mt-1">Master PF Gross from uploads</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Hospital Pool Fund</span>
+              <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              ₱{totalPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-amber-600 font-medium mt-1">Retained hospital pool</p>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Net Sharing Pool</span>
+              <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 mt-2">
+              ₱{totalSharingGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-purple-600 font-medium mt-1">Medical + Non-Medical splits</p>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Action Box or Admin Breakdown */}
+      {isDoctorRole ? (
+        <div className="bg-gradient-to-br from-slate-900 to-emerald-950 text-white p-6 rounded-xl shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                CONFIDENTIAL COMPENSATION SUMMARY
+              </span>
+              <h2 className="text-xl font-bold mt-2">Personal Payslip & Compensation for {selectedMonth}</h2>
+              <p className="text-xs text-slate-300 mt-0.5">
+                All cases, departmental shares, and tax withholdings computed specifically for <strong className="text-emerald-400">{doctorName}</strong>.
+              </p>
+            </div>
+            <Link
+              href="/doctor-summary"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow transition shrink-0"
+            >
+              <FileText className="w-4 h-4" /> View & Print My Payslip
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800 text-xs">
+            <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700">
+              <span className="text-slate-400 text-[10px] uppercase font-semibold">Total Handled</span>
+              <p className="text-base font-bold text-white mt-0.5">{totalCasesCount} Claims</p>
+            </div>
+            <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700">
+              <span className="text-slate-400 text-[10px] uppercase font-semibold">Gross PF</span>
+              <p className="text-base font-bold text-white mt-0.5">₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="bg-emerald-900/40 p-3 rounded-lg border border-emerald-700/50">
+              <span className="text-emerald-400 text-[10px] uppercase font-bold">Net Take-Home</span>
+              <p className="text-base font-extrabold text-emerald-300 mt-0.5">₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()}</p>
-          <p className="text-xs text-slate-500 mt-1">Verified claims in period</p>
         </div>
-
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">{selectedMonth} Total PF</span>
-            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-              <DollarSign className="w-5 h-5" />
+      ) : (
+        // Admin Breakdown Banner
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white p-6 rounded-xl shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">50% For Medical Pool ({selectedMonth})</h2>
+              <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30">
+                50.00% Share
+              </span>
+            </div>
+            <p className="text-3xl font-extrabold mt-3 text-emerald-400">
+              ₱{medicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-slate-300 mt-1">Allocated to doctors, surgeons, anesth, pedia, IM, hemo, FP team</p>
+            <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Tax rule applied:</span>
+              <span className="text-emerald-300 font-semibold">20% Withholding Tax automatically deducted</span>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
-            ₱{totalGrossPF.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">Master PF Gross from uploads</p>
-        </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Hospital Pool Fund</span>
-            <div className="p-2 bg-amber-50 rounded-lg text-amber-600">
-              <TrendingUp className="w-5 h-5" />
+          <div className="bg-gradient-to-br from-sky-900 to-slate-900 text-white p-6 rounded-xl shadow-sm">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">50% For Non-Medical Pool ({selectedMonth})</h2>
+              <span className="px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 text-xs font-medium border border-sky-500/30">
+                50.00% Share
+              </span>
+            </div>
+            <p className="text-3xl font-extrabold mt-3 text-sky-400">
+              ₱{nonMedicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-slate-300 mt-1">Hospital staff, administrative, nursing, and support personnel pool</p>
+            <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Hospital Facility:</span>
+              <span className="text-sky-300 font-semibold">Cebu Provincial Hospital - Balamban</span>
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
-            ₱{totalPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-amber-600 font-medium mt-1">Retained hospital pool</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Net Sharing Pool</span>
-            <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
-              <Users className="w-5 h-5" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">
-            ₱{totalSharingGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-purple-600 font-medium mt-1">Medical + Non-Medical splits</p>
-        </div>
-      </div>
-
-      {/* Sharing Allocation Breakdown Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gradient-to-br from-emerald-900 to-slate-900 text-white p-6 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">50% For Medical Pool ({selectedMonth})</h2>
-            <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30">
-              50.00% Share
-            </span>
-          </div>
-          <p className="text-3xl font-extrabold mt-3 text-emerald-400">
-            ₱{medicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-slate-300 mt-1">Allocated to doctors, surgeons, anesth, pedia, IM, hemo, FP team</p>
-          <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
-            <span className="text-slate-400">Tax rule applied:</span>
-            <span className="text-emerald-300 font-semibold">20% Withholding Tax automatically deducted</span>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-sky-900 to-slate-900 text-white p-6 rounded-xl shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold">50% For Non-Medical Pool ({selectedMonth})</h2>
-            <span className="px-2.5 py-1 rounded bg-sky-500/20 text-sky-300 text-xs font-medium border border-sky-500/30">
-              50.00% Share
-            </span>
-          </div>
-          <p className="text-3xl font-extrabold mt-3 text-sky-400">
-            ₱{nonMedicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </p>
-          <p className="text-xs text-slate-300 mt-1">Hospital staff, administrative, nursing, and support personnel pool</p>
-          <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
-            <span className="text-slate-400">Hospital Facility:</span>
-            <span className="text-sky-300 font-semibold">Cebu Provincial Hospital - Balamban</span>
-          </div>
-        </div>
-      </div>
-
-      {totalCasesCount === 0 && (
-        <div className="p-6 bg-slate-100 rounded-xl border border-slate-200 text-center space-y-2">
-          <p className="text-sm font-bold text-slate-800">No ACPN claims uploaded yet for {selectedMonth}</p>
-          <p className="text-xs text-slate-500">
-            Upload your official PhilHealth ACPN PDF for {selectedMonth} to view exact amounts, cases, and doctor payouts.
-          </p>
-          <Link
-            href="/upload"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition mt-2"
-          >
-            <UploadCloud className="w-4 h-4" /> Upload {selectedMonth} ACPN PDF
-          </Link>
         </div>
       )}
     </div>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PeriodProvider, usePeriod } from '@/context/PeriodContext';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog } from 'lucide-react';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog, Stethoscope } from 'lucide-react';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -17,6 +17,8 @@ function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname === '/login') {
     return <>{children}</>;
   }
+
+  const isDoctor = currentUser?.role === 'doctor';
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900">
@@ -34,7 +36,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Global Month Selector in Sidebar */}
+        {/* Global Month Selector */}
         <div className="p-3 border-b border-slate-800 bg-slate-950/60">
           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between mb-1.5">
             <span className="flex items-center gap-1.5">
@@ -48,7 +50,7 @@ function AppShell({ children }: { children: React.ReactNode }) {
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
           >
             {monthsList.map((m) => (
               <option key={m} value={m}>📅 {m}</option>
@@ -59,8 +61,9 @@ function AppShell({ children }: { children: React.ReactNode }) {
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Overview & Claims
+            {isDoctor ? 'My Doctor Portal' : 'Overview & Claims'}
           </div>
+
           <Link
             href="/"
             className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
@@ -68,17 +71,21 @@ function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <LayoutDashboard className="w-4 h-4 text-emerald-400" />
-            Executive Dashboard
+            {isDoctor ? 'My Overview' : 'Executive Dashboard'}
           </Link>
-          <Link
-            href="/upload"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/upload' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <UploadCloud className="w-4 h-4 text-sky-400" />
-            Upload ACPN PDF
-          </Link>
+
+          {!isDoctor && (
+            <Link
+              href="/upload"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/upload' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <UploadCloud className="w-4 h-4 text-sky-400" />
+              Upload ACPN PDF
+            </Link>
+          )}
+
           <Link
             href="/cases"
             className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
@@ -86,21 +93,13 @@ function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <FileSpreadsheet className="w-4 h-4 text-amber-400" />
-            Cases Master Grid
+            {isDoctor ? 'My Assigned Cases' : 'Cases Master Grid'}
           </Link>
 
           <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Sharing & Distributions
+            {isDoctor ? 'My Shares & Payslips' : 'Sharing & Distributions'}
           </div>
-          <Link
-            href="/departments"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/departments' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Layers className="w-4 h-4 text-purple-400" />
-            Department Shares
-          </Link>
+
           <Link
             href="/doctor-summary"
             className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
@@ -108,30 +107,47 @@ function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <Users className="w-4 h-4 text-teal-400" />
-            Doctor PF & 20% WTax
-          </Link>
-          <Link
-            href="/export"
-            className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/export' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <Download className="w-4 h-4 text-blue-400" />
-            Export & Reports
+            {isDoctor ? 'My PF & Payslip' : 'Doctor PF & 20% WTax'}
           </Link>
 
-          <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Administration
-          </div>
           <Link
-            href="/users"
+            href="/departments"
             className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
-              pathname === '/users' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              pathname === '/departments' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <UserCog className="w-4 h-4 text-rose-400" />
-            User Management
+            <Layers className="w-4 h-4 text-purple-400" />
+            {isDoctor ? 'Department Shares' : 'Department Shares'}
           </Link>
+
+          {!isDoctor && (
+            <Link
+              href="/export"
+              className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                pathname === '/export' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Download className="w-4 h-4 text-blue-400" />
+              Export & Reports
+            </Link>
+          )}
+
+          {!isDoctor && (
+            <>
+              <div className="pt-4 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Administration
+              </div>
+              <Link
+                href="/users"
+                className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition ${
+                  pathname === '/users' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <UserCog className="w-4 h-4 text-rose-400" />
+                User Management
+              </Link>
+            </>
+          )}
 
           <div className="pt-4 px-3 py-2">
             <button
@@ -147,12 +163,18 @@ function AppShell({ children }: { children: React.ReactNode }) {
         {/* User Account & Logout */}
         <div className="p-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center font-bold text-white text-xs">
-              {currentUser?.name ? currentUser.name[0] : 'U'}
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-white text-xs ${
+              isDoctor ? 'bg-purple-600' : 'bg-emerald-600'
+            }`}>
+              {isDoctor ? '🩺' : (currentUser?.name ? currentUser.name[0] : 'U')}
             </div>
             <div className="overflow-hidden">
-              <p className="font-bold text-white text-[11px] truncate max-w-[100px]">{currentUser?.name || 'Admin'}</p>
-              <p className="text-[9px] text-emerald-400 uppercase font-semibold">{currentUser?.role || 'Admin'}</p>
+              <p className="font-bold text-white text-[11px] truncate max-w-[110px]">
+                {isDoctor ? (currentUser?.doctorName || currentUser?.name) : (currentUser?.name || 'Admin')}
+              </p>
+              <p className="text-[9px] text-emerald-400 uppercase font-semibold">
+                {isDoctor ? 'Doctor Portal' : (currentUser?.role || 'Admin')}
+              </p>
             </div>
           </div>
           <button
@@ -169,10 +191,15 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
         <div className="bg-white border-b border-slate-200 px-6 py-2.5 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">Viewing Active Month:</span>
+            <span className="text-xs text-slate-500 font-medium">Active Period:</span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
               📅 {selectedMonth}
             </span>
+            {isDoctor && (
+              <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
+                🔒 Doctor Privacy Filter Active
+              </span>
+            )}
           </div>
           <div className="text-xs text-slate-500 flex items-center gap-4">
             <span>Facility: <strong className="text-slate-800">Cebu Provincial Hospital - Balamban</strong></span>
