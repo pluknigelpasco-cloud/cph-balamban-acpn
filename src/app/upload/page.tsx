@@ -5,20 +5,10 @@ import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRig
 import { parseAcpnText } from '@/lib/acpnParser';
 import { recalculateCase } from '@/lib/computationEngine';
 import { usePeriod, ALL_MONTHS_NAMES, ALL_YEARS } from '@/context/PeriodContext';
+import { fetchAllBatches, saveBatchesToCloud, fetchAllCases, saveCasesToCloud, clearMonthBatchesFromCloud, clearMonthCasesFromCloud, UploadedBatch } from '@/lib/dataService';
 import { ClaimItem, CaseItem } from '@/types';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-interface UploadedBatch {
-  id: string;
-  fileName: string;
-  month: string;
-  uploadDate: string;
-  claimCount: number;
-  grossTotal: number;
-  pfTotal: number;
-  claims: ClaimItem[];
-}
 
 interface PendingUpload {
   batches: UploadedBatch[];
@@ -49,13 +39,13 @@ export default function UploadPage() {
   // Duplicate Modal State
   const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
 
+  const loadData = async () => {
+    const batches = await fetchAllBatches();
+    setUploadedBatches(batches);
+  };
+
   useEffect(() => {
-    const saved = localStorage.getItem('cph_acpn_batches');
-    if (saved) {
-      try {
-        setUploadedBatches(JSON.parse(saved));
-      } catch (e) {}
-    }
+    loadData();
   }, []);
 
   const loadPdfJs = async () => {
@@ -90,18 +80,17 @@ export default function UploadPage() {
     return fullText;
   };
 
-  const commitClaimsToDatabase = (batchesToSave: UploadedBatch[], claimsToImport: ClaimItem[], month: string) => {
-    // 1. Save Batches
+  const commitClaimsToDatabase = async (batchesToSave: UploadedBatch[], claimsToImport: ClaimItem[], month: string) => {
+    setIsLoading(true);
+    setLoadingStatus('Syncing new claims to Supabase Cloud Database...');
+
+    // 1. Save Batches to Cloud
     const updatedBatches = [...batchesToSave, ...uploadedBatches];
     setUploadedBatches(updatedBatches);
-    localStorage.setItem('cph_acpn_batches', JSON.stringify(updatedBatches));
+    await saveBatchesToCloud(updatedBatches);
 
-    // 2. Import into Cases Master Grid
-    const savedCasesStr = localStorage.getItem('cph_cases_data');
-    let existingCases: CaseItem[] = [];
-    if (savedCasesStr) {
-      try { existingCases = JSON.parse(savedCasesStr); } catch (e) {}
-    }
+    // 2. Fetch Existing Cases and Append New Cases
+    const existingCases = await fetchAllCases();
 
     const newCases: CaseItem[] = claimsToImport.map((c, idx) => {
       let surgeon = '';
@@ -151,13 +140,15 @@ export default function UploadPage() {
     });
 
     const combined = [...newCases, ...existingCases];
-    localStorage.setItem('cph_cases_data', JSON.stringify(combined));
+    await saveCasesToCloud(combined);
 
     setCurrentParsedClaims(claimsToImport);
-    setSuccessMessage(`Successfully imported ${claimsToImport.length} claims into ${month} database!`);
+    setSuccessMessage(`Successfully synced ${claimsToImport.length} claims to Supabase Cloud for ${month}!`);
     setImportedSuccessfully(true);
     setPendingUpload(null);
     setSelectedMonth(month);
+    setIsLoading(false);
+    setLoadingStatus('');
   };
 
   const handleFilesUpload = async (files: FileList | File[]) => {
@@ -174,13 +165,8 @@ export default function UploadPage() {
 
     // Existing series numbers already in system
     const existingSeries = new Set<string>();
-    const savedCasesStr = localStorage.getItem('cph_cases_data');
-    if (savedCasesStr) {
-      try {
-        const cases: any[] = JSON.parse(savedCasesStr);
-        cases.forEach(c => { if (c.series) existingSeries.add(c.series); });
-      } catch (e) {}
-    }
+    const existingCases = await fetchAllCases();
+    existingCases.forEach(c => { if ((c as any).series) existingSeries.add((c as any).series); });
     uploadedBatches.forEach(b => b.claims.forEach(c => { if (c.series) existingSeries.add(c.series); }));
 
     const duplicateClaims: ClaimItem[] = [];
@@ -241,7 +227,7 @@ export default function UploadPage() {
       });
     } else if (newBatches.length > 0) {
       // 0 duplicates found -> Proceed safely directly
-      commitClaimsToDatabase(newBatches, allParsed, targetMonth);
+      await commitClaimsToDatabase(newBatches, allParsed, targetMonth);
     }
   };
 
@@ -253,33 +239,27 @@ export default function UploadPage() {
     }
   };
 
-  const handleDeleteBatch = (id: string) => {
+  const handleDeleteBatch = async (id: string) => {
     if (confirm('Delete this uploaded ACPN batch?')) {
       const updated = uploadedBatches.filter(b => b.id !== id);
       setUploadedBatches(updated);
-      localStorage.setItem('cph_acpn_batches', JSON.stringify(updated));
+      await saveBatchesToCloud(updated);
     }
   };
 
-  const handleClearMonthUploads = () => {
+  const handleClearMonthUploads = async () => {
     if (confirm(`Are you sure you want to clear all uploaded ACPN batches and cases for ${targetMonth} ONLY?\n(Data from other months will remain untouched.)`)) {
+      setIsLoading(true);
       const remainingBatches = uploadedBatches.filter(b => b.month !== targetMonth);
       setUploadedBatches(remainingBatches);
-      localStorage.setItem('cph_acpn_batches', JSON.stringify(remainingBatches));
-
-      const savedCasesStr = localStorage.getItem('cph_cases_data');
-      if (savedCasesStr) {
-        try {
-          const allCases: CaseItem[] = JSON.parse(savedCasesStr);
-          const remainingCases = allCases.filter(c => (c as any).month !== targetMonth);
-          localStorage.setItem('cph_cases_data', JSON.stringify(remainingCases));
-        } catch (e) {}
-      }
+      await clearMonthBatchesFromCloud(targetMonth);
+      await clearMonthCasesFromCloud(targetMonth);
 
       setCurrentParsedClaims([]);
       setSuccessMessage(null);
       setDuplicateWarning(null);
       setPendingUpload(null);
+      setIsLoading(false);
     }
   };
 
@@ -298,11 +278,11 @@ export default function UploadPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">Smart Duplicate Protection</span>
+            <span className="text-xs text-slate-500">Cloud Sync & Duplicate Protection Active</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
-            Upload official monthly ACPN PDFs for any month or year. Selected upload target: <strong className="text-emerald-700">{targetMonth}</strong>.
+            Upload official monthly ACPN PDFs. Data automatically syncs across all devices & browsers via Supabase Cloud.
           </p>
         </div>
 

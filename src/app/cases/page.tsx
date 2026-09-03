@@ -7,34 +7,35 @@ import { CaseItem } from '@/types';
 import { recalculateCase, OFFICIAL_EXCEL_REMARKS } from '@/lib/computationEngine';
 import { exportCasesToExcel } from '@/lib/exportUtils';
 import { OFFICIAL_DOCTORS_ROSTER, sanitizeDoctorName } from '@/lib/acpnParser';
-import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
+import { fetchAllCases, saveCasesToCloud, deleteCaseFromCloud, clearMonthCasesFromCloud } from '@/lib/dataService';
+import { Search, Download, Plus, Archive, Trash2, RotateCcw, UploadCloud, ChevronLeft, ChevronRight, Activity, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CasesPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
 
-  // Load from localStorage and sanitize any old dirty records
+  const loadData = async () => {
+    setIsSyncing(true);
+    const data = await fetchAllCases();
+    const sanitized = data.map(c => recalculateCase({
+      ...c,
+      surgeon: sanitizeDoctorName(c.surgeon || ''),
+      anesth: sanitizeDoctorName(c.anesth || ''),
+      imPediaGp: sanitizeDoctorName(c.imPediaGp || '')
+    }));
+    setCases(sanitized);
+    setIsSyncing(false);
+  };
+
   useEffect(() => {
-    const saved = localStorage.getItem('cph_cases_data');
-    if (saved) {
-      try {
-        const rawCases: CaseItem[] = JSON.parse(saved);
-        const sanitized = rawCases.map(c => recalculateCase({
-          ...c,
-          surgeon: sanitizeDoctorName(c.surgeon || ''),
-          anesth: sanitizeDoctorName(c.anesth || ''),
-          imPediaGp: sanitizeDoctorName(c.imPediaGp || '')
-        }));
-        setCases(sanitized);
-        localStorage.setItem('cph_cases_data', JSON.stringify(sanitized));
-      } catch (e) {}
-    }
+    loadData();
   }, []);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,9 +94,9 @@ export default function CasesPage() {
     return filteredCases.slice(start, start + pageSize);
   }, [filteredCases, currentPage, pageSize]);
 
-  const updateAndPersist = (updatedCases: CaseItem[]) => {
+  const updateAndPersist = async (updatedCases: CaseItem[]) => {
     setCases(updatedCases);
-    localStorage.setItem('cph_cases_data', JSON.stringify(updatedCases));
+    await saveCasesToCloud(updatedCases);
   };
 
   const handleUpdateRow = (id: string, field: keyof CaseItem, value: any) => {
@@ -114,20 +115,23 @@ export default function CasesPage() {
     updateAndPersist(updated);
   };
 
-  const handleDeleteCase = (id: string) => {
+  const handleDeleteCase = async (id: string) => {
     if (confirm('Delete this case?')) {
       const updated = cases.filter(c => c.id !== id);
-      updateAndPersist(updated);
+      setCases(updated);
+      await deleteCaseFromCloud(id);
     }
   };
 
-  const handleResetMonthCases = () => {
+  const handleResetMonthCases = async () => {
     if (confirm(`Are you sure you want to clear cases for ${selectedMonth} ONLY?\n(Cases in other months will remain untouched.)`)) {
       if (selectedMonth === 'ALL') {
-        updateAndPersist([]);
+        setCases([]);
+        await clearMonthCasesFromCloud('ALL');
       } else {
         const remaining = cases.filter(c => (c as any).month !== selectedMonth);
-        updateAndPersist(remaining);
+        setCases(remaining);
+        await clearMonthCasesFromCloud(selectedMonth);
       }
     }
   };
@@ -144,7 +148,7 @@ export default function CasesPage() {
       remarks: customRemark,
       totalAmount: isHemoCase ? 1750 : 10000,
     });
-    const updated = [{ ...newCase, month: selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth, isArchived: false } as any, ...cases];
+    const updated = [{ ...newCase, month: selectedMonth === 'ALL' ? 'SEPTEMBER 2026' : selectedMonth, isArchived: false } as any, ...cases];
     updateAndPersist(updated);
   };
 
@@ -170,8 +174,15 @@ export default function CasesPage() {
                   ARCHIVED VIEW
                 </span>
               )}
+              <button
+                onClick={loadData}
+                title="Refresh Cloud Sync"
+                className="p-1 text-slate-400 hover:text-emerald-600 transition"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+              </button>
             </div>
-            <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Formula Engine</h1>
+            <h1 className="text-xl font-bold text-slate-900 mt-1">Cases Master Grid & Cloud Database</h1>
             <p className="text-xs text-slate-500">
               Showing <span className="font-bold text-emerald-600">{filteredCases.length}</span> claims for <strong className="text-slate-800">{selectedMonth}</strong> ({remarkOptions.length} distinct Excel remark types).
             </p>

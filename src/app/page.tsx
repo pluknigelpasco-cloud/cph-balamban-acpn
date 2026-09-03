@@ -6,20 +6,25 @@ import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText } from 'lucide-react';
+import { fetchAllCases, autoMigrateLocalDataToCloud } from '@/lib/dataService';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText, CheckCircle2, RefreshCw } from 'lucide-react';
 
 export default function DashboardPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const loadData = async () => {
+    setIsSyncing(true);
+    await autoMigrateLocalDataToCloud();
+    const data = await fetchAllCases();
+    setCases(data);
+    setIsSyncing(false);
+  };
 
   useEffect(() => {
-    const saved = localStorage.getItem('cph_cases_data');
-    if (saved) {
-      try {
-        setCases(JSON.parse(saved));
-      } catch (e) {}
-    }
+    loadData();
   }, []);
 
   const isDoctorRole = user?.role === 'doctor';
@@ -74,6 +79,13 @@ export default function DashboardPage() {
               <Calendar className="w-3 h-3 text-emerald-400" />
               MONTH: {selectedMonth}
             </span>
+            <button
+              onClick={loadData}
+              title="Refresh and sync cloud data"
+              className="p-1 text-slate-400 hover:text-emerald-600 transition"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            </button>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">
             {isDoctorRole ? `Welcome, ${doctorName || user?.name}` : 'Cebu Provincial Hospital - Balamban'}

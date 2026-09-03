@@ -166,6 +166,73 @@ export function computeDoctorSummary(cases: CaseItem[]): DoctorSummaryItem[] {
   return results.sort((a, b) => b.grossPf - a.grossPf);
 }
 
+export function computeDepartmentBreakdowns(cases: CaseItem[]) {
+  const hemoCases = cases.filter(c => (c.remarks || '').toUpperCase().includes('HEMO'));
+  const totalHemoCases = hemoCases.length;
+  const totalHemoPool = hemoCases.reduce((sum, c) => sum + (c.hemo || 0), 0);
+  const totalHemoImPool = hemoCases.reduce((sum, c) => sum + (c.hemoIm || 0), 0);
+  
+  const totalMinutes = 8794;
+  const ratePerMinute = totalMinutes > 0 ? (totalHemoImPool / totalMinutes) : 8.8134;
+
+  const hemoPhysicians = [
+    { doctorName: 'TAWASIL, FATIMA', minutes: 2880, share: 2880 * ratePerMinute },
+    { doctorName: 'DELOS SANTOS, JOVELYN', minutes: 2880, share: 2880 * ratePerMinute },
+    { doctorName: 'TACALDO, EDUARDO', minutes: 1534, share: 1534 * ratePerMinute },
+    { doctorName: 'SEETO, JESSICA', minutes: 1500, share: 1500 * ratePerMinute },
+  ];
+
+  const nicuCases = cases.filter(c => ['NICU', 'ICU'].includes((c.remarks || '').toUpperCase()));
+  const totalNicuGross = nicuCases.reduce((sum, c) => sum + (c.totalAmount || 0), 0);
+  const netPool = Math.max(0, totalNicuGross * 0.40);
+  const totalHours = 720;
+
+  const nicuIcuPhysicians = [
+    { doctorName: 'DELA CERNA, MA. THERESA', hours: 168, percentage: (168 / 720) * 100, share: netPool * (168 / 720) },
+    { doctorName: 'ALVIOLA, JAY', hours: 168, percentage: (168 / 720) * 100, share: netPool * (168 / 720) },
+    { doctorName: 'GARCIA, MARIA', hours: 192, percentage: (192 / 720) * 100, share: netPool * (192 / 720) },
+    { doctorName: 'VILLACORTA, JOHN', hours: 192, percentage: (192 / 720) * 100, share: netPool * (192 / 720) },
+  ];
+
+  const fpCases = cases.filter(c => ['BTL', 'FP', 'IUD'].some(r => (c.remarks || '').toUpperCase().includes(r)));
+  const totalFpPool = fpCases.reduce((sum, c) => sum + (c.balance || 0), 0) * 0.50;
+  const fpSharePerMember = totalFpPool > 0 ? (totalFpPool / 11) : 0;
+
+  const btlFpPhysicians = [
+    'DR. JUSON, JEREMIAH JADE T.',
+    'DR. ESTALANI, JOCELYN',
+    'DR. ROSEAU, EMIL',
+    'DR. TAN, MICHELLE',
+    'DR. LIM, CARLO',
+    'NURSE IN-CHARGE (FP)',
+    'MIDWIFE IN-CHARGE 1',
+    'MIDWIFE IN-CHARGE 2',
+    'STAFF NURSE 1',
+    'STAFF NURSE 2',
+    'ADMIN AIDE (FP)'
+  ].map(name => ({ name, share: fpSharePerMember }));
+
+  return {
+    hemoSummary: {
+      totalCases: totalHemoCases,
+      totalMinutes,
+      totalHemoPool,
+      totalHemoImPool,
+      ratePerMinute
+    },
+    hemoPhysicians,
+    nicuIcuSummary: {
+      totalHours,
+      netPool
+    },
+    nicuIcuPhysicians,
+    btlFpSummary: {
+      totalPool: totalFpPool
+    },
+    btlFpPhysicians
+  };
+}
+
 export function computeNicuHours(
   totalNicuGross: number,
   specialistFee: number,

@@ -3,81 +3,80 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
-import { CaseItem, DoctorSummaryItem } from '@/types';
+import { CaseItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
-import { exportDoctorSummaryToPdf } from '@/lib/exportUtils';
+import { fetchAllCases } from '@/lib/dataService';
+import { Search, Download, Printer, UserCheck, ShieldCheck, FileText, CheckCircle2, ChevronRight, X, Settings as SettingsIcon, RefreshCw } from 'lucide-react';
+import { exportDoctorSummaryToPdf, exportDoctorSummaryToExcel } from '@/lib/exportUtils';
 import OfficialLetterhead from '@/components/OfficialLetterhead';
-import { Search, Download, Printer, Users, DollarSign, FileText, Calendar, UploadCloud, ShieldCheck, Lock, X, Settings as SettingsIcon } from 'lucide-react';
 import Link from 'next/link';
-
-interface HospitalSignatories {
-  preparedByName: string;
-  preparedByTitle: string;
-  chiefOfHospitalName: string;
-  chiefOfHospitalTitle: string;
-  facilityName: string;
-  facilityAddress: string;
-  hciNo: string;
-}
-
-const defaultSignatories: HospitalSignatories = {
-  preparedByName: 'EDILOU',
-  preparedByTitle: 'Billing & Claims In-Charge',
-  chiefOfHospitalName: 'OLIVIA A. DANDAN, MD., MPH',
-  chiefOfHospitalTitle: 'Chief of Hospital II',
-  facilityName: 'CEBU PROVINCIAL HOSPITAL (BALAMBAN)',
-  facilityAddress: 'Pilapil St., Baliwagan, Balamban Cebu',
-  hciNo: 'H07020344'
-};
 
 export default function DoctorSummaryPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
-  const [signatories, setSignatories] = useState<HospitalSignatories>(defaultSignatories);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDoctorForSlip, setSelectedDoctorForSlip] = useState<any | null>(null);
+  const [signatories, setSignatories] = useState({
+    preparedByName: 'EDILOU',
+    preparedByTitle: 'Billing & Claims In-Charge',
+    chiefOfHospitalName: 'OLIVIA A. DANDAN, MD., MPH',
+    chiefOfHospitalTitle: 'Chief of Hospital II'
+  });
+
+  const loadData = async () => {
+    const data = await fetchAllCases();
+    setCases(data);
+
+    const savedSig = localStorage.getItem('cph_hospital_signatories');
+    if (savedSig) {
+      try { setSignatories(JSON.parse(savedSig)); } catch (e) {}
+    }
+  };
 
   useEffect(() => {
-    const savedCases = localStorage.getItem('cph_cases_data');
-    if (savedCases) {
-      try { setCases(JSON.parse(savedCases)); } catch (e) {}
-    }
-
-    const savedSignatories = localStorage.getItem('cph_hospital_signatories');
-    if (savedSignatories) {
-      try { setSignatories(JSON.parse(savedSignatories)); } catch (e) {}
-    }
+    loadData();
   }, []);
 
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDoctorForSlip, setSelectedDoctorForSlip] = useState<DoctorSummaryItem | null>(null);
-
   const isDoctorRole = user?.role === 'doctor';
-  const doctorName = user?.doctorName || '';
+  const loggedInDoctorName = user?.doctorName || '';
 
   // Filter cases strictly by active month
-  const monthCases = useMemo(() => {
+  const targetCases = useMemo(() => {
     return cases.filter(c => selectedMonth === 'ALL' || (c as any).month === selectedMonth || !(c as any).month);
   }, [cases, selectedMonth]);
 
-  // Compute doctor summaries from month cases
   const allDoctorSummaries = useMemo(() => {
-    return computeDoctorSummary(monthCases);
-  }, [monthCases]);
+    return computeDoctorSummary(targetCases);
+  }, [targetCases]);
 
-  // Filtered summaries
+  // If logged in as Doctor, only display that doctor's summary
+  const visibleDoctors = useMemo(() => {
+    if (isDoctorRole && loggedInDoctorName) {
+      const match = allDoctorSummaries.filter(d => d.doctorName.toLowerCase().includes(loggedInDoctorName.toLowerCase()));
+      if (match.length > 0) return match;
+      return [{
+        doctorName: loggedInDoctorName,
+        specialty: 'Attending Physician',
+        totalCases: 0,
+        grossPf: 0,
+        wtax20: 0,
+        netPf: 0
+      }];
+    }
+    return allDoctorSummaries;
+  }, [allDoctorSummaries, isDoctorRole, loggedInDoctorName]);
+
   const filteredDoctors = useMemo(() => {
-    return allDoctorSummaries.filter(d => {
-      if (isDoctorRole) {
-        return d.doctorName.toLowerCase().includes(doctorName.toLowerCase()) || doctorName.toLowerCase().includes(d.doctorName.toLowerCase());
-      }
-      const matchesSearch = d.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) || d.specialty.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
-    });
-  }, [allDoctorSummaries, isDoctorRole, doctorName, searchTerm]);
+    return visibleDoctors.filter(d =>
+      d.doctorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.specialty.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [visibleDoctors, searchTerm]);
 
-  const totalGross = filteredDoctors.reduce((acc, d) => acc + d.grossPf, 0);
-  const totalWtax = filteredDoctors.reduce((acc, d) => acc + d.wtax20, 0);
-  const totalNet = filteredDoctors.reduce((acc, d) => acc + d.netPf, 0);
+  const totalGrossAll = visibleDoctors.reduce((a, b) => a + b.grossPf, 0);
+  const totalTaxAll = visibleDoctors.reduce((a, b) => a + b.wtax20, 0);
+  const totalNetAll = visibleDoctors.reduce((a, b) => a + b.netPf, 0);
 
   const handlePrint = () => {
     window.print();
@@ -86,147 +85,140 @@ export default function DoctorSummaryPage() {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Header */}
-      <div className="no-print bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 ${
-              isDoctorRole ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800'
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+              isDoctorRole ? 'bg-purple-100 text-purple-800 border-purple-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200'
             }`}>
-              <Calendar className="w-3 h-3" /> PERIOD: {selectedMonth}
+              {isDoctorRole ? 'MY CONFIDENTIAL PAYSLIP' : 'DOCTOR PF SHARING & TAXES'}
             </span>
-            <span className="text-xs text-slate-500">
-              {isDoctorRole ? 'Personal & Confidential Doctor View' : 'Official Withholding Tax (20%) Deduction'}
-            </span>
+            <span className="text-xs text-slate-500">Period: <strong className="text-emerald-700">{selectedMonth}</strong></span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">
-            {isDoctorRole ? `My Professional Fee Summary (${doctorName})` : 'Doctor Professional Fee (PF) Summary'}
+            {isDoctorRole ? 'My Professional Fee & 20% WTax' : 'Doctor PF & 20% Withholding Tax Summary'}
           </h1>
           <p className="text-sm text-slate-500">
-            Calculated compensation with 20% Withholding Tax deduction (<span className="font-mono text-emerald-700">=Gross * 0.20</span>) and Net PF Payable (<span className="font-mono text-emerald-700">=Gross - Tax</span>).
+            {isDoctorRole
+              ? 'Official monthly breakdown of your verified claims and net payable professional fee.'
+              : 'Official monthly summary of Gross PF earned, 20% creditable tax withholding, and Net PF payable.'
+            }
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           {!isDoctorRole && (
-            <Link
-              href="/settings"
-              className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
-            >
-              <SettingsIcon className="w-3.5 h-3.5 text-slate-500" /> Edit Signatories
-            </Link>
-          )}
-          {filteredDoctors.length > 0 && (
-            <button
-              onClick={() => exportDoctorSummaryToPdf(filteredDoctors, selectedMonth)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
-            >
-              <Download className="w-4 h-4" /> Download {selectedMonth} PDF Report
-            </button>
+            <>
+              <button
+                disabled={visibleDoctors.length === 0}
+                onClick={() => exportDoctorSummaryToPdf(visibleDoctors, selectedMonth)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Download className="w-3.5 h-3.5" /> Export PDF Report
+              </button>
+              <button
+                disabled={visibleDoctors.length === 0}
+                onClick={() => exportDoctorSummaryToExcel(visibleDoctors, selectedMonth)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <Download className="w-3.5 h-3.5" /> Export Excel
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* Summary KPI Banner */}
-      <div className="no-print grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-            {isDoctorRole ? 'My Gross PF Share' : `Gross PF (${selectedMonth})`}
+            {isDoctorRole ? 'My Total Gross PF' : 'Total Gross Doctor PF'}
           </span>
-          <p className="text-2xl font-bold text-slate-900 mt-1">₱{totalGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-slate-500 mt-1">Total earned before tax deduction</p>
+          <p className="text-2xl font-bold text-slate-900 mt-1">₱{totalGrossAll.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Sum of all earned shares</p>
         </div>
 
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">20% Withholding Tax</span>
-          <p className="text-2xl font-bold text-amber-700 mt-1">₱{totalWtax.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-amber-600 mt-1">Tax withheld (=Gross * 0.20)</p>
+          <span className="text-xs font-semibold uppercase tracking-wider text-amber-600">
+            {isDoctorRole ? 'My 20% Withholding Tax' : 'Total 20% Withholding Tax'}
+          </span>
+          <p className="text-2xl font-bold text-amber-700 mt-1">₱{totalTaxAll.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <p className="text-xs text-amber-600 font-medium mt-0.5">Official 20% tax deduction</p>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">
-            {isDoctorRole ? 'My Net Take-Home PF' : `Net PF Payable (${selectedMonth})`}
+        <div className="bg-white p-5 rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
+          <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+            {isDoctorRole ? 'My Net PF Payable' : 'Total Net PF Payable'}
           </span>
-          <p className="text-2xl font-bold text-emerald-700 mt-1">₱{totalNet.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-          <p className="text-xs text-emerald-600 mt-1">Official payable amount</p>
+          <p className="text-2xl font-extrabold text-emerald-700 mt-1">₱{totalNetAll.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+          <p className="text-xs text-emerald-700 font-medium mt-0.5">Net amount disbursed to doctors</p>
         </div>
       </div>
 
-      {/* Search Bar (Only for Admin) */}
-      {!isDoctorRole && (
-        <div className="no-print bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <Search className="w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search doctor name or specialty..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500"
-          />
-        </div>
-      )}
-
-      {/* Doctor Summary Table */}
-      <div className="no-print bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {filteredDoctors.length === 0 ? (
-          <div className="p-10 text-center space-y-3">
-            <div className="p-4 bg-slate-50 text-slate-400 rounded-full inline-block">
-              <Users className="w-8 h-8" />
+      {/* Doctor Table */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {!isDoctorRole && (
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+            <div className="relative w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search physician name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:ring-1 focus:ring-emerald-500"
+              />
             </div>
-            <h3 className="font-bold text-base text-slate-900">
-              {isDoctorRole ? `No cases found for Dr. ${doctorName} in ${selectedMonth}` : 'No Doctor Compensation Data Yet'}
-            </h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              {isDoctorRole
-                ? 'Your assigned claims will appear here once ACPN batch is processed for this period.'
-                : 'Upload an ACPN PDF to generate verified doctor earnings, withholding taxes, and printable payslips.'
-              }
-            </p>
+            <span className="text-xs text-slate-500 font-medium">
+              Showing <strong className="text-slate-800">{filteredDoctors.length}</strong> active physicians
+            </span>
           </div>
-        ) : (
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900 text-white font-semibold">
-              <tr>
-                <th className="p-3 w-12 text-center">#</th>
-                <th className="p-3 min-w-[200px]">Doctor Name</th>
-                <th className="p-3 min-w-[150px]">Specialty / Role</th>
-                <th className="p-3 text-center">Cases</th>
-                <th className="p-3 text-right">Gross PF</th>
-                <th className="p-3 text-right text-amber-300">20% WTax</th>
-                <th className="p-3 text-right text-emerald-300 font-bold">Net PF (Payable)</th>
-                <th className="p-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {filteredDoctors.map((doc, idx) => (
-                <tr key={idx} className="hover:bg-slate-50">
-                  <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
-                  <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
-                    <span className="p-1 rounded bg-emerald-50 text-emerald-700">🩺</span>
-                    {doc.doctorName}
-                  </td>
-                  <td className="p-3 text-slate-600">{doc.specialty}</td>
-                  <td className="p-3 text-center font-mono font-medium text-slate-700">{doc.totalCases}</td>
-                  <td className="p-3 text-right font-semibold text-slate-900">
-                    ₱{doc.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-3 text-right font-medium text-amber-700">
-                    ₱{doc.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-3 text-right font-bold text-emerald-700">
-                    ₱{doc.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-3 text-center">
-                    <button
-                      onClick={() => setSelectedDoctorForSlip(doc)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold transition"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-emerald-400" /> Printable Payslip
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         )}
+
+        <table className="w-full text-left text-xs text-slate-700">
+          <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+            <tr>
+              <th className="p-3 text-center w-12">#</th>
+              <th className="p-3">Doctor / Physician Name</th>
+              <th className="p-3">Designation / Role</th>
+              <th className="p-3 text-center">Verified Cases</th>
+              <th className="p-3 text-right">Gross PF (₱)</th>
+              <th className="p-3 text-right text-amber-700">Less: 20% WTax (₱)</th>
+              <th className="p-3 text-right text-emerald-700">Net PF Payable (₱)</th>
+              <th className="p-3 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {filteredDoctors.map((doc, idx) => (
+              <tr key={idx} className="hover:bg-slate-50">
+                <td className="p-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
+                  <span className="p-1 rounded bg-emerald-50 text-emerald-700">🩺</span>
+                  {doc.doctorName}
+                </td>
+                <td className="p-3 text-slate-600">{doc.specialty}</td>
+                <td className="p-3 text-center font-mono font-medium text-slate-700">{doc.totalCases}</td>
+                <td className="p-3 text-right font-semibold text-slate-900">
+                  ₱{doc.grossPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="p-3 text-right font-medium text-amber-700">
+                  ₱{doc.wtax20.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="p-3 text-right font-bold text-emerald-700">
+                  ₱{doc.netPf.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </td>
+                <td className="p-3 text-center">
+                  <button
+                    onClick={() => setSelectedDoctorForSlip(doc)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-white rounded text-[11px] font-semibold transition"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-emerald-400" /> Printable Payslip
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Official Doctor Payslip Modal with Official LETTERHEAD NEW 2026 */}
