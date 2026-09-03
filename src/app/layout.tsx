@@ -3,10 +3,11 @@
 import React, { useState } from 'react';
 import './globals.css';
 import Link from 'next/link';
+import Head from 'next/head';
 import { usePathname } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { PeriodProvider, usePeriod } from '@/context/PeriodContext';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Hospital, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog, Stethoscope, Settings } from 'lucide-react';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, Layers, Download, Calendar, HelpCircle, Info, LogOut, UserCheck, UserCog, Stethoscope, Settings } from 'lucide-react';
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,12 +27,12 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0 no-print">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-600 rounded-lg shadow-sm">
-              <Hospital className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full bg-white p-0.5 shadow-sm overflow-hidden flex items-center justify-center shrink-0 border border-emerald-400">
+              <img src="/image3.jpeg" alt="CPH Balamban Official Seal" className="w-full h-full object-cover rounded-full" />
             </div>
             <div>
-              <h1 className="font-bold text-sm leading-tight text-white">CPH BALAMBAN</h1>
-              <p className="text-[11px] text-emerald-400 font-medium">PHIC ACPN SYSTEM</p>
+              <h1 className="font-bold text-sm leading-tight text-white tracking-wide">CPH BALAMBAN</h1>
+              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">PHIC ACPN PORTAL</p>
             </div>
           </div>
         </div>
@@ -323,6 +324,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <title>CPH Balamban - PhilHealth ACPN Portal</title>
+        <meta name="description" content="Cebu Provincial Hospital - Balamban PhilHealth ACPN & PF Sharing System" />
+        <link rel="icon" href="/image3.jpeg" type="image/jpeg" />
+        <link rel="shortcut icon" href="/image3.jpeg" type="image/jpeg" />
+        <link rel="apple-touch-icon" href="/image3.jpeg" />
+      </head>
       <body>
         <AuthProvider>
           <PeriodProvider>

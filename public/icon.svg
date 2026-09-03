@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#047857" stroke="#10b981" stroke-width="4"/>
+  <circle cx="50" cy="50" r="40" fill="#064e3b" />
+  <!-- Medical Cross in Center -->
+  <rect x="42" y="24" width="16" height="52" rx="4" fill="#ffffff"/>
+  <rect x="24" y="42" width="52" height="16" rx="4" fill="#ffffff"/>
+  <!-- Gold Caduceus / Star Accent -->
+  <circle cx="50" cy="50" r="7" fill="#fbbf24"/>
+  <path d="M50 28 L53 36 L61 36 L55 41 L57 49 L50 44 L43 49 L45 41 L39 36 L47 36 Z" fill="#fbbf24" opacity="0.9"/>
+</svg>
