@@ -6,14 +6,15 @@ import { usePeriod } from '@/context/PeriodContext';
 import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
-import { fetchAllCases, autoMigrateLocalDataToCloud } from '@/lib/dataService';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText, CheckCircle2, RefreshCw } from 'lucide-react';
+import { fetchAllCases, pushLocalDataToCloud, autoMigrateLocalDataToCloud } from '@/lib/dataService';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText, CheckCircle2, RefreshCw, Cloud, CloudUpload, ShieldCheck } from 'lucide-react';
 
 export default function DashboardPage() {
   const { selectedMonth } = usePeriod();
   const { user } = useAuth();
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
 
   const loadData = async () => {
     setIsSyncing(true);
@@ -26,6 +27,17 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleManualCloudSync = async () => {
+    setIsSyncing(true);
+    setSyncStatusMessage('Uploading and syncing data with Supabase Cloud Database...');
+    const res = await pushLocalDataToCloud();
+    const freshData = await fetchAllCases();
+    setCases(freshData);
+    setIsSyncing(false);
+    setSyncStatusMessage(`✓ Successfully synchronized ${freshData.length} cases to Cloud! All browsers and devices are now updated.`);
+    setTimeout(() => setSyncStatusMessage(null), 5000);
+  };
 
   const isDoctorRole = user?.role === 'doctor';
   const doctorName = user?.doctorName || '';
@@ -79,13 +91,10 @@ export default function DashboardPage() {
               <Calendar className="w-3 h-3 text-emerald-400" />
               MONTH: {selectedMonth}
             </span>
-            <button
-              onClick={loadData}
-              title="Refresh and sync cloud data"
-              className="p-1 text-slate-400 hover:text-emerald-600 transition"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
-            </button>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 flex items-center gap-1 border border-sky-200">
+              <Cloud className="w-3 h-3 text-sky-600" />
+              Supabase Cloud Connected
+            </span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">
             {isDoctorRole ? `Welcome, ${doctorName || user?.name}` : 'Cebu Provincial Hospital - Balamban'}
@@ -98,25 +107,44 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleManualCloudSync}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-50 text-sky-800 hover:bg-sky-100 border border-sky-200 rounded-lg text-xs font-bold shadow-sm transition"
+            title="Sync all cases with Supabase Cloud Database"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-sky-600 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync Cloud Database'}
+          </button>
+
           {!isDoctorRole && (
             <Link
               href="/upload"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium shadow-sm transition"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
             >
               <UploadCloud className="w-4 h-4" />
               Upload ACPN PDF
             </Link>
           )}
+
           <Link
             href="/cases"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium shadow-sm transition"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            {isDoctorRole ? `View My Assigned Cases (${totalCasesCount})` : `View ${selectedMonth} Cases (${totalCasesCount})`}
+            {isDoctorRole ? `My Cases (${totalCasesCount})` : `View Cases (${totalCasesCount})`}
           </Link>
         </div>
       </div>
+
+      {/* Cloud Sync Notification Banner */}
+      {syncStatusMessage && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3 text-emerald-800 text-xs font-bold animate-fadeIn">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>{syncStatusMessage}</span>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       {isDoctorRole ? (

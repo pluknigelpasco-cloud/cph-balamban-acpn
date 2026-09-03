@@ -52,7 +52,7 @@ export const dbRowToCase = (row: any): CaseItem => ({
   isArchived: row.is_archived || false,
 } as any);
 
-// Fetch All Cases (From Supabase with LocalStorage cache fallback)
+// Fetch All Cases from Cloud (or fallback)
 export async function fetchAllCases(): Promise<CaseItem[]> {
   try {
     if (isSupabaseConfigured()) {
@@ -83,17 +83,17 @@ export async function fetchAllCases(): Promise<CaseItem[]> {
   return [];
 }
 
-// Save Cases to Cloud in Batches
-export async function saveCasesToCloud(cases: CaseItem[]): Promise<void> {
-  // Always update local cache
+// Save Cases to Cloud in Batches of 100
+export async function saveCasesToCloud(cases: CaseItem[]): Promise<{ count: number; error: any }> {
   if (typeof window !== 'undefined') {
     localStorage.setItem('cph_cases_data', JSON.stringify(cases));
   }
 
-  if (!isSupabaseConfigured() || cases.length === 0) return;
+  if (!isSupabaseConfigured() || cases.length === 0) return { count: cases.length, error: null };
 
   const rows = cases.map(caseToDbRow);
-  const CHUNK_SIZE = 150;
+  const CHUNK_SIZE = 100;
+  let hasError = null;
 
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const chunk = rows.slice(i, i + CHUNK_SIZE);
@@ -101,11 +101,17 @@ export async function saveCasesToCloud(cases: CaseItem[]): Promise<void> {
       const { error } = await supabase
         .from('cases')
         .upsert(chunk, { onConflict: 'id' });
-      if (error) console.error('Error upserting cases chunk:', error);
+      if (error) {
+        console.error('Error upserting chunk:', error);
+        hasError = error;
+      }
     } catch (e) {
       console.error('Failed to sync chunk to Supabase:', e);
+      hasError = e;
     }
   }
+
+  return { count: rows.length, error: hasError };
 }
 
 // Delete Single Case
@@ -214,32 +220,48 @@ export async function clearMonthBatchesFromCloud(month: string): Promise<void> {
   }
 }
 
-// Auto Migrate Local Storage Data to Cloud on initial connection
+// Manual or Automatic Sync: Push Local to Cloud
+export async function pushLocalDataToCloud(): Promise<{ casesCount: number; batchesCount: number; error: any }> {
+  if (typeof window === 'undefined') return { casesCount: 0, batchesCount: 0, error: 'Not in browser' };
+
+  let localCases: CaseItem[] = [];
+  const savedCases = localStorage.getItem('cph_cases_data');
+  if (savedCases) {
+    try { localCases = JSON.parse(savedCases); } catch (e) {}
+  }
+
+  let localBatches: UploadedBatch[] = [];
+  const savedBatches = localStorage.getItem('cph_acpn_batches');
+  if (savedBatches) {
+    try { localBatches = JSON.parse(savedBatches); } catch (e) {}
+  }
+
+  if (localCases.length > 0) {
+    await saveCasesToCloud(localCases);
+  }
+
+  if (localBatches.length > 0) {
+    await saveBatchesToCloud(localBatches);
+  }
+
+  return { casesCount: localCases.length, batchesCount: localBatches.length, error: null };
+}
+
+// Auto Migrate on initial connect
 export async function autoMigrateLocalDataToCloud(): Promise<void> {
   if (!isSupabaseConfigured() || typeof window === 'undefined') return;
 
   try {
-    // Check if cloud already has cases
     const { count } = await supabase
       .from('cases')
       .select('*', { count: 'exact', head: true });
 
-    // If cloud is empty or has fewer cases than local, upload local
     const saved = localStorage.getItem('cph_cases_data');
     if (saved) {
       const localCases: CaseItem[] = JSON.parse(saved);
       if (localCases.length > 0 && (!count || count === 0)) {
-        console.log('Auto-migrating ' + localCases.length + ' local cases to Supabase Cloud...');
+        console.log('Auto-uploading ' + localCases.length + ' local cases to Supabase...');
         await saveCasesToCloud(localCases);
-      }
-    }
-
-    // Also migrate batches
-    const savedBatches = localStorage.getItem('cph_acpn_batches');
-    if (savedBatches) {
-      const localBatches: UploadedBatch[] = JSON.parse(savedBatches);
-      if (localBatches.length > 0) {
-        await saveBatchesToCloud(localBatches);
       }
     }
   } catch (e) {
