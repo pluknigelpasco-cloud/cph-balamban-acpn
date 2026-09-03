@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check, X, ShieldAlert, SkipForward, RotateCw } from 'lucide-react';
 import { parseAcpnText } from '@/lib/acpnParser';
 import { recalculateCase } from '@/lib/computationEngine';
-import { usePeriod } from '@/context/PeriodContext';
+import { usePeriod, ALL_MONTHS_NAMES, ALL_YEARS } from '@/context/PeriodContext';
 import { ClaimItem, CaseItem } from '@/types';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -34,7 +34,12 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
-  const [targetMonth, setTargetMonth] = useState(selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth);
+  
+  // Month and Year Picker State
+  const [targetMonthName, setTargetMonthName] = useState('SEPTEMBER');
+  const [targetYear, setTargetYear] = useState('2026');
+  const targetMonth = `${targetMonthName} ${targetYear}`;
+
   const [uploadedBatches, setUploadedBatches] = useState<UploadedBatch[]>([]);
   const [currentParsedClaims, setCurrentParsedClaims] = useState<ClaimItem[]>([]);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
@@ -152,6 +157,7 @@ export default function UploadPage() {
     setSuccessMessage(`Successfully imported ${claimsToImport.length} claims into ${month} database!`);
     setImportedSuccessfully(true);
     setPendingUpload(null);
+    setSelectedMonth(month);
   };
 
   const handleFilesUpload = async (files: FileList | File[]) => {
@@ -296,7 +302,7 @@ export default function UploadPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">
-            Upload official monthly ACPN PDFs. System pauses automatically when duplicate series claims are detected.
+            Upload official monthly ACPN PDFs for any month or year. Selected upload target: <strong className="text-emerald-700">{targetMonth}</strong>.
           </p>
         </div>
 
@@ -310,19 +316,36 @@ export default function UploadPage() {
               <Trash2 className="w-3.5 h-3.5" /> Clear {targetMonth} Uploads ({monthBatches.length})
             </button>
           )}
-          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+
+          {/* Complete Month & Year Picker */}
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
             <Calendar className="w-4 h-4 text-emerald-600" />
-            <div className="text-xs">
-              <span className="text-slate-500 block text-[10px] uppercase font-bold">Target Month:</span>
-              <select
-                value={targetMonth}
-                onChange={(e) => setTargetMonth(e.target.value)}
-                className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
-              >
-                <option value="JUNE 2026">JUNE 2026</option>
-                <option value="JULY 2026">JULY 2026</option>
-                <option value="AUGUST 2026">AUGUST 2026</option>
-              </select>
+            <div className="text-xs flex items-center gap-1.5">
+              <div>
+                <span className="text-slate-500 block text-[9px] uppercase font-bold">Month:</span>
+                <select
+                  value={targetMonthName}
+                  onChange={(e) => setTargetMonthName(e.target.value)}
+                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-900 text-xs focus:outline-none cursor-pointer"
+                >
+                  {ALL_MONTHS_NAMES.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <span className="text-slate-500 block text-[9px] uppercase font-bold">Year:</span>
+                <select
+                  value={targetYear}
+                  onChange={(e) => setTargetYear(e.target.value)}
+                  className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-900 text-xs focus:outline-none cursor-pointer"
+                >
+                  {ALL_YEARS.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -344,12 +367,12 @@ export default function UploadPage() {
           {isLoading ? loadingStatus : `Drag & drop single or multiple ACPN PDFs for ${targetMonth}`}
         </h3>
         <p className="text-xs text-slate-500 mt-1 max-w-md">
-          Upload fresh ACPN files for <span className="font-bold text-slate-800">{targetMonth}</span>. All claims, Hemo splits, and doctor shares are computed specifically for this period.
+          Upload fresh ACPN files for <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">{targetMonth}</span>. All claims, Hemo splits, and doctor shares are computed specifically for this period.
         </p>
 
         <label className="mt-4 cursor-pointer inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition">
           <UploadCloud className="w-4 h-4" />
-          Browse Multiple PDFs
+          Browse Multiple PDFs for {targetMonth}
           <input
             type="file"
             accept=".pdf"

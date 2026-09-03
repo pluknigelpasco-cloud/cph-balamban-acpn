@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { usePeriod } from '@/context/PeriodContext';
+import { usePeriod, ALL_MONTHS_NAMES, ALL_YEARS } from '@/context/PeriodContext';
 import { exportCasesToExcel, exportDoctorSummaryToPdf, exportDoctorSummaryToExcel } from '@/lib/exportUtils';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { Download, FileSpreadsheet, FileText, CheckCircle2, Shield, Calendar, Activity, Users, ArrowRight } from 'lucide-react';
@@ -11,7 +11,11 @@ import Link from 'next/link';
 export default function ExportPage() {
   const { selectedMonth, setSelectedMonth, monthsList } = usePeriod();
   const [cases, setCases] = useState<CaseItem[]>([]);
-  const [exportMonth, setExportMonth] = useState(selectedMonth === 'ALL' ? 'JUNE 2026' : selectedMonth);
+  
+  // Export Month & Year state
+  const [exportMonthName, setExportMonthName] = useState('SEPTEMBER');
+  const [exportYear, setExportYear] = useState('2026');
+  const exportMonth = `${exportMonthName} ${exportYear}`;
 
   // Load actual cases from localStorage
   useEffect(() => {
@@ -39,7 +43,7 @@ export default function ExportPage() {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      {/* Header with Month Selector */}
+      {/* Header with Month & Year Picker */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -54,20 +58,35 @@ export default function ExportPage() {
           </p>
         </div>
 
-        {/* Target Month Selector */}
+        {/* Target Month & Year Selector */}
         <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
           <Calendar className="w-4 h-4 text-emerald-600" />
-          <div className="text-xs">
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">Select Month for Export:</span>
-            <select
-              value={exportMonth}
-              onChange={(e) => setExportMonth(e.target.value)}
-              className="bg-transparent font-bold text-slate-900 text-sm focus:outline-none cursor-pointer"
-            >
-              {monthsList.map(m => (
-                <option key={m} value={m}>📅 {m}</option>
-              ))}
-            </select>
+          <div className="text-xs flex items-center gap-1.5">
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Month:</span>
+              <select
+                value={exportMonthName}
+                onChange={(e) => setExportMonthName(e.target.value)}
+                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-900 text-xs focus:outline-none cursor-pointer"
+              >
+                {ALL_MONTHS_NAMES.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <span className="text-slate-500 block text-[9px] uppercase font-bold">Year:</span>
+              <select
+                value={exportYear}
+                onChange={(e) => setExportYear(e.target.value)}
+                className="bg-white border border-slate-300 rounded px-1.5 py-0.5 font-bold text-slate-900 text-xs focus:outline-none cursor-pointer"
+              >
+                {ALL_YEARS.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
