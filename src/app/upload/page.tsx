@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check, X, ShieldAlert, SkipForward, RotateCw } from 'lucide-react';
+import { UploadCloud, FileText, CheckCircle2, AlertTriangle, RefreshCw, ArrowRight, Calendar, Trash2, ShieldCheck, Check, X, ShieldAlert, SkipForward, RotateCw, Cloud } from 'lucide-react';
 import { parseAcpnText } from '@/lib/acpnParser';
 import { recalculateCase } from '@/lib/computationEngine';
 import { usePeriod, ALL_MONTHS_NAMES, ALL_YEARS } from '@/context/PeriodContext';
-import { fetchAllBatches, saveBatchesToCloud, fetchAllCases, saveCasesToCloud, clearMonthBatchesFromCloud, clearMonthCasesFromCloud, UploadedBatch } from '@/lib/dataService';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { fetchAllBatches, saveBatchesToCloud, deleteBatchFromCloud, fetchAllCases, saveCasesToCloud, clearMonthBatchesFromCloud, clearMonthCasesFromCloud, UploadedBatch } from '@/lib/dataService';
 import { ClaimItem, CaseItem } from '@/types';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -46,6 +47,20 @@ export default function UploadPage() {
 
   useEffect(() => {
     loadData();
+
+    // Supabase Realtime Listener across all open browsers
+    if (isSupabaseConfigured()) {
+      const channel = supabase
+        .channel('realtime_batches_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'acpn_batches' }, () => {
+          loadData();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const loadPdfJs = async () => {
@@ -243,7 +258,7 @@ export default function UploadPage() {
     if (confirm('Delete this uploaded ACPN batch?')) {
       const updated = uploadedBatches.filter(b => b.id !== id);
       setUploadedBatches(updated);
-      await saveBatchesToCloud(updated);
+      await deleteBatchFromCloud(id);
     }
   };
 
@@ -278,7 +293,7 @@ export default function UploadPage() {
             <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
               BULK ACPN UPLOADER & DOCTOR PF SYNC
             </span>
-            <span className="text-xs text-slate-500">Cloud Sync & Duplicate Protection Active</span>
+            <span className="text-xs text-slate-500">Cloud Sync & Realtime Protection Active</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mt-1">PhilHealth ACPN PDF Auto-Extractor</h1>
           <p className="text-sm text-slate-500">

@@ -52,7 +52,7 @@ export const dbRowToCase = (row: any): CaseItem => ({
   isArchived: row.is_archived || false,
 } as any);
 
-// Fetch All Cases from Cloud (or fallback)
+// Fetch All Cases strictly honoring Cloud DB state
 export async function fetchAllCases(): Promise<CaseItem[]> {
   try {
     if (isSupabaseConfigured()) {
@@ -61,7 +61,7 @@ export async function fetchAllCases(): Promise<CaseItem[]> {
         .select('*')
         .order('created_at', { ascending: true });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const parsed = data.map(dbRowToCase);
         if (typeof window !== 'undefined') {
           localStorage.setItem('cph_cases_data', JSON.stringify(parsed));
@@ -70,10 +70,10 @@ export async function fetchAllCases(): Promise<CaseItem[]> {
       }
     }
   } catch (err) {
-    console.error('Supabase fetch error, fallback to local:', err);
+    console.error('Supabase fetch error:', err);
   }
 
-  // Fallback to localStorage
+  // Offline fallback only if network error
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('cph_cases_data');
     if (saved) {
@@ -101,12 +101,8 @@ export async function saveCasesToCloud(cases: CaseItem[]): Promise<{ count: numb
       const { error } = await supabase
         .from('cases')
         .upsert(chunk, { onConflict: 'id' });
-      if (error) {
-        console.error('Error upserting chunk:', error);
-        hasError = error;
-      }
+      if (error) hasError = error;
     } catch (e) {
-      console.error('Failed to sync chunk to Supabase:', e);
       hasError = e;
     }
   }
@@ -116,6 +112,16 @@ export async function saveCasesToCloud(cases: CaseItem[]): Promise<{ count: numb
 
 // Delete Single Case
 export async function deleteCaseFromCloud(id: string): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('cph_cases_data');
+    if (saved) {
+      try {
+        const all: CaseItem[] = JSON.parse(saved);
+        localStorage.setItem('cph_cases_data', JSON.stringify(all.filter(c => c.id !== id)));
+      } catch (e) {}
+    }
+  }
+
   if (isSupabaseConfigured()) {
     try {
       await supabase.from('cases').delete().eq('id', id);
@@ -127,10 +133,21 @@ export async function deleteCaseFromCloud(id: string): Promise<void> {
 
 // Clear Month Cases
 export async function clearMonthCasesFromCloud(month: string): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('cph_cases_data');
+    if (saved) {
+      try {
+        const all: CaseItem[] = JSON.parse(saved);
+        const rem = month === 'ALL' ? [] : all.filter(c => (c as any).month !== month);
+        localStorage.setItem('cph_cases_data', JSON.stringify(rem));
+      } catch (e) {}
+    }
+  }
+
   if (isSupabaseConfigured()) {
     try {
       if (month === 'ALL') {
-        await supabase.from('cases').delete().neq('id', '___non_existent___');
+        await supabase.from('cases').delete().neq('id', '___empty___');
       } else {
         await supabase.from('cases').delete().eq('month', month);
       }
@@ -140,7 +157,7 @@ export async function clearMonthCasesFromCloud(month: string): Promise<void> {
   }
 }
 
-// Fetch Batches
+// Fetch Batches strictly honoring Cloud DB state
 export async function fetchAllBatches(): Promise<UploadedBatch[]> {
   try {
     if (isSupabaseConfigured()) {
@@ -149,7 +166,7 @@ export async function fetchAllBatches(): Promise<UploadedBatch[]> {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const batches: UploadedBatch[] = data.map((b: any) => ({
           id: b.id,
           fileName: b.file_name,
@@ -205,12 +222,44 @@ export async function saveBatchesToCloud(batches: UploadedBatch[]): Promise<void
   }
 }
 
+// Delete Single Batch
+export async function deleteBatchFromCloud(id: string): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('cph_acpn_batches');
+    if (saved) {
+      try {
+        const all: UploadedBatch[] = JSON.parse(saved);
+        localStorage.setItem('cph_acpn_batches', JSON.stringify(all.filter(b => b.id !== id)));
+      } catch (e) {}
+    }
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      await supabase.from('acpn_batches').delete().eq('id', id);
+    } catch (e) {
+      console.error('Error deleting batch from Supabase:', e);
+    }
+  }
+}
+
 // Clear Month Batches
 export async function clearMonthBatchesFromCloud(month: string): Promise<void> {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('cph_acpn_batches');
+    if (saved) {
+      try {
+        const all: UploadedBatch[] = JSON.parse(saved);
+        const rem = month === 'ALL' ? [] : all.filter(b => b.month !== month);
+        localStorage.setItem('cph_acpn_batches', JSON.stringify(rem));
+      } catch (e) {}
+    }
+  }
+
   if (isSupabaseConfigured()) {
     try {
       if (month === 'ALL') {
-        await supabase.from('acpn_batches').delete().neq('id', '___non_existent___');
+        await supabase.from('acpn_batches').delete().neq('id', '___empty___');
       } else {
         await supabase.from('acpn_batches').delete().eq('month', month);
       }
@@ -220,7 +269,7 @@ export async function clearMonthBatchesFromCloud(month: string): Promise<void> {
   }
 }
 
-// Manual or Automatic Sync: Push Local to Cloud
+// Manual Push Local Storage Data to Cloud
 export async function pushLocalDataToCloud(): Promise<{ casesCount: number; batchesCount: number; error: any }> {
   if (typeof window === 'undefined') return { casesCount: 0, batchesCount: 0, error: 'Not in browser' };
 
@@ -247,7 +296,7 @@ export async function pushLocalDataToCloud(): Promise<{ casesCount: number; batc
   return { casesCount: localCases.length, batchesCount: localBatches.length, error: null };
 }
 
-// Auto Migrate on initial connect
+// Auto Migrate Local Storage to Cloud on initial connect
 export async function autoMigrateLocalDataToCloud(): Promise<void> {
   if (!isSupabaseConfigured() || typeof window === 'undefined') return;
 
@@ -260,8 +309,15 @@ export async function autoMigrateLocalDataToCloud(): Promise<void> {
     if (saved) {
       const localCases: CaseItem[] = JSON.parse(saved);
       if (localCases.length > 0 && (!count || count === 0)) {
-        console.log('Auto-uploading ' + localCases.length + ' local cases to Supabase...');
         await saveCasesToCloud(localCases);
+      }
+    }
+
+    const savedBatches = localStorage.getItem('cph_acpn_batches');
+    if (savedBatches) {
+      const localBatches: UploadedBatch[] = JSON.parse(savedBatches);
+      if (localBatches.length > 0) {
+        await saveBatchesToCloud(localBatches);
       }
     }
   } catch (e) {
