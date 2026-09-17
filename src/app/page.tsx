@@ -7,7 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { CaseItem } from '@/types';
 import { computeDoctorSummary } from '@/lib/computationEngine';
 import { fetchAllCases, pushLocalDataToCloud, autoMigrateLocalDataToCloud } from '@/lib/dataService';
-import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText, CheckCircle2, RefreshCw, Cloud, CloudUpload, ShieldCheck } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { LayoutDashboard, FileSpreadsheet, UploadCloud, Users, DollarSign, TrendingUp, Activity, ArrowRight, Calendar, Stethoscope, FileText, CheckCircle2, RefreshCw, Cloud } from 'lucide-react';
 
 export default function DashboardPage() {
   const { selectedMonth } = usePeriod();
@@ -26,12 +27,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+
+    // Supabase Realtime Listener for instant cross-device updates
+    if (isSupabaseConfigured()) {
+      const channel = supabase
+        .channel('realtime_dashboard_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, () => {
+          loadData();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const handleManualCloudSync = async () => {
     setIsSyncing(true);
     setSyncStatusMessage('Uploading and syncing data with Supabase Cloud Database...');
-    const res = await pushLocalDataToCloud();
+    await pushLocalDataToCloud();
     const freshData = await fetchAllCases();
     setCases(freshData);
     setIsSyncing(false);
@@ -157,7 +172,7 @@ export default function DashboardPage() {
                 <Stethoscope className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount} cases</p>
+            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()} cases</p>
             <p className="text-xs text-slate-500 mt-1">Cases assigned to you in {selectedMonth}</p>
           </div>
 
@@ -169,7 +184,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 mt-2">
-              ₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-slate-500 mt-1">Your total earned before tax</p>
           </div>
@@ -182,7 +197,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-amber-700 mt-2">
-              ₱{(doctorSummary?.wtax20 || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{(doctorSummary?.wtax20 || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-amber-600 font-medium mt-1">Withholding tax (=Gross * 0.20)</p>
           </div>
@@ -195,7 +210,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-extrabold text-emerald-700 mt-2">
-              ₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-emerald-700 font-medium mt-1">Official take-home amount</p>
           </div>
@@ -210,7 +225,7 @@ export default function DashboardPage() {
                 <Activity className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-2">{totalCasesCount.toLocaleString()} cases</p>
             <p className="text-xs text-slate-500 mt-1">Verified claims in period</p>
           </div>
 
@@ -222,7 +237,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 mt-2">
-              ₱{totalGrossPF.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{totalGrossPF.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-slate-500 mt-1">Master PF Gross from uploads</p>
           </div>
@@ -235,7 +250,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 mt-2">
-              ₱{totalPool.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{totalPool.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-amber-600 font-medium mt-1">Retained hospital pool</p>
           </div>
@@ -248,7 +263,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 mt-2">
-              ₱{totalSharingGross.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{totalSharingGross.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-purple-600 font-medium mt-1">Medical + Non-Medical splits</p>
           </div>
@@ -283,11 +298,11 @@ export default function DashboardPage() {
             </div>
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700">
               <span className="text-slate-400 text-[10px] uppercase font-semibold">Gross PF</span>
-              <p className="text-base font-bold text-white mt-0.5">₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+              <p className="text-base font-bold text-white mt-0.5">₱{(doctorSummary?.grossPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
             <div className="bg-emerald-900/40 p-3 rounded-lg border border-emerald-700/50">
               <span className="text-emerald-400 text-[10px] uppercase font-bold">Net Take-Home</span>
-              <p className="text-base font-extrabold text-emerald-300 mt-0.5">₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+              <p className="text-base font-extrabold text-emerald-300 mt-0.5">₱{(doctorSummary?.netPf || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
             </div>
           </div>
         </div>
@@ -302,7 +317,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-3xl font-extrabold mt-3 text-emerald-400">
-              ₱{medicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{medicalShare.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-slate-300 mt-1">Allocated to doctors, surgeons, anesth, pedia, IM, hemo, FP team</p>
             <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">
@@ -319,7 +334,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <p className="text-3xl font-extrabold mt-3 text-sky-400">
-              ₱{nonMedicalShare.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              ₱{nonMedicalShare.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
             <p className="text-xs text-slate-300 mt-1">Hospital staff, administrative, nursing, and support personnel pool</p>
             <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center text-xs">

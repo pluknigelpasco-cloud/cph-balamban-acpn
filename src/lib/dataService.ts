@@ -52,25 +52,48 @@ export const dbRowToCase = (row: any): CaseItem => ({
   isArchived: row.is_archived || false,
 } as any);
 
-// Fetch All Cases strictly honoring Cloud DB state
+// Fetch All Cases strictly honoring Cloud DB state with Unlimited Pagination (Bypasses 1000-row limit)
 export async function fetchAllCases(): Promise<CaseItem[]> {
   try {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('*')
-        .order('created_at', { ascending: true });
+      let allRows: any[] = [];
+      let from = 0;
+      const step = 1000;
 
-      if (!error && data) {
-        const parsed = data.map(dbRowToCase);
+      while (true) {
+        const { data, error } = await supabase
+          .from('cases')
+          .select('*')
+          .range(from, from + step - 1)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Supabase fetch error chunk:', error);
+          break;
+        }
+
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+
+        if (data.length < step) break;
+        from += step;
+      }
+
+      if (allRows.length > 0) {
+        const parsed = allRows.map(dbRowToCase);
         if (typeof window !== 'undefined') {
           localStorage.setItem('cph_cases_data', JSON.stringify(parsed));
         }
         return parsed;
+      } else {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cph_cases_data', JSON.stringify([]));
+        }
+        return [];
       }
     }
   } catch (err) {
-    console.error('Supabase fetch error:', err);
+    console.error('Supabase fetch error, fallback to local:', err);
   }
 
   // Offline fallback only if network error
@@ -161,13 +184,26 @@ export async function clearMonthCasesFromCloud(month: string): Promise<void> {
 export async function fetchAllBatches(): Promise<UploadedBatch[]> {
   try {
     if (isSupabaseConfigured()) {
-      const { data, error } = await supabase
-        .from('acpn_batches')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let allBatches: any[] = [];
+      let from = 0;
+      const step = 1000;
 
-      if (!error && data) {
-        const batches: UploadedBatch[] = data.map((b: any) => ({
+      while (true) {
+        const { data, error } = await supabase
+          .from('acpn_batches')
+          .select('*')
+          .range(from, from + step - 1)
+          .order('created_at', { ascending: false });
+
+        if (error) break;
+        if (!data || data.length === 0) break;
+        allBatches.push(...data);
+        if (data.length < step) break;
+        from += step;
+      }
+
+      if (allBatches.length > 0) {
+        const batches: UploadedBatch[] = allBatches.map((b: any) => ({
           id: b.id,
           fileName: b.file_name,
           month: b.month,
@@ -181,6 +217,11 @@ export async function fetchAllBatches(): Promise<UploadedBatch[]> {
           localStorage.setItem('cph_acpn_batches', JSON.stringify(batches));
         }
         return batches;
+      } else {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cph_acpn_batches', JSON.stringify([]));
+        }
+        return [];
       }
     }
   } catch (err) {
